@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "altium-parser"
+version = "1.0.0"
+description = "Altium Designer project file parser - extracts components, nets, traces, layers and coordinates to JSON/XML"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "olefile>=0.46",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+altium-parser = "altium_parser.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["altium_parser*"]
