@@ -36,7 +36,15 @@ class SchDocParser:
         self._file_path = Path(file_path)
 
     def parse(self) -> SchDocument:
-        """Parse the SchDoc file and return a SchDocument model."""
+        """Parse the SchDoc file and return a SchDocument model.
+        
+        Uses Two-Pass Parsing strategy:
+        - First Pass: Linear scan to build index of all records
+        - Second Pass: Assemble parent-child relationships via OWNERINDEX
+        
+        IMPORTANT: In Altium SchDoc files, children reference their parent using
+        OWNERINDEX which points to the parent's INDEX field (not file position).
+        """
         doc = SchDocument(filename=self._file_path.name)
 
         with OleReader(self._file_path) as ole:
@@ -48,9 +56,19 @@ class SchDocParser:
 
         doc.raw_record_count = len(records)
 
-        # Build flat list of parsed objects
-        parsed_objects: list[tuple[int, Any]] = []  # (record_index, object)
-        component_indices: list[int] = []  # indices into parsed_objects for components
+        # ============================================================
+        # FIRST PASS: Indexing
+        # Linear read all records, build index for each parsed object.
+        # IMPORTANT: Use Altium's INDEX field for parent containers,
+        # as children's OWNERINDEX references this INDEX value.
+        # ============================================================
+        
+        # Mapping: file_position_index -> parsed_object
+        objects_by_index: dict[int, Any] = {}
+        # Quick lookup for parent containers using Altium's INDEX field
+        # (children's OWNERINDEX references these keys)
+        components_by_altium_index: dict[int, SchComponent] = {}
+        sheet_symbols_by_altium_index: dict[int, SchSheetSymbol] = {}
 
         for idx, kv in enumerate(records):
             record_type_str = kv.get("RECORD", "")
@@ -64,42 +82,58 @@ class SchDocParser:
 
             obj = self._dispatch_record(record_type, kv, idx)
             if obj is not None:
-                parsed_objects.append((idx, obj))
+                objects_by_index[idx] = obj
+                # For components and sheet symbols, store using their Altium INDEX
+                # (children will reference this via OWNERINDEX)
                 if isinstance(obj, SchComponent):
-                    component_indices.append(len(parsed_objects) - 1)
+                    components_by_altium_index[obj.altium_index] = obj
+                elif isinstance(obj, SchSheetSymbol):
+                    sheet_symbols_by_altium_index[obj.altium_index] = obj
             else:
                 doc.unknown_record_count += 1
 
-        # Build owner index mapping: record_index -> list of child objects
-        components_by_index: dict[int, SchComponent] = {}
-        sheet_symbols_by_index: dict[int, SchSheetSymbol] = {}
-
-        for _, obj in parsed_objects:
-            if isinstance(obj, SchComponent):
-                components_by_index[obj.owner_index] = obj
-            elif isinstance(obj, SchSheetSymbol):
-                sheet_symbols_by_index[obj.owner_index] = obj
-
-        # Assign children to parents via owner_index
-        for _, obj in parsed_objects:
-            owner = getattr(obj, "owner_index", -1)
-            if owner < 0:
+        # ============================================================
+        # SECOND PASS: Assembling
+        # Iterate through all objects and assign children to parents
+        # using OWNERINDEX property (which references Altium's INDEX).
+        # ============================================================
+        
+        for idx, obj in objects_by_index.items():
+            # Skip containers (they don't have OWNERINDEX pointing to another parent)
+            if isinstance(obj, (SchComponent, SchSheetSymbol, SchSheet)):
                 continue
-
-            if isinstance(obj, SchPin) and owner in components_by_index:
-                components_by_index[owner].pins.append(obj)
-            elif isinstance(obj, SchParameter) and owner in components_by_index:
-                components_by_index[owner].parameters.append(obj)
-            elif isinstance(obj, SchSheetEntry) and owner in sheet_symbols_by_index:
-                sheet_symbols_by_index[owner].entries.append(obj)
-            elif owner in components_by_index and isinstance(obj, (
+            
+            # Get the OWNERINDEX - this references the parent's Altium INDEX field
+            owner_idx = getattr(obj, "owner_index", -1)
+            
+            if owner_idx < 0:
+                # No owner, this is a top-level object
+                continue
+            
+            # Assign to parent component (lookup by Altium INDEX)
+            if isinstance(obj, SchPin):
+                if owner_idx in components_by_altium_index:
+                    components_by_altium_index[owner_idx].pins.append(obj)
+            elif isinstance(obj, SchParameter):
+                if owner_idx in components_by_altium_index:
+                    components_by_altium_index[owner_idx].parameters.append(obj)
+            elif isinstance(obj, SchSheetEntry):
+                if owner_idx in sheet_symbols_by_altium_index:
+                    sheet_symbols_by_altium_index[owner_idx].entries.append(obj)
+            elif isinstance(obj, (
                 SchPolyline, SchPolygon, SchRectangle, SchLine, SchArc,
                 SchEllipse, SchRoundRectangle, SchBezier, SchText, SchLabel,
             )):
-                components_by_index[owner].graphic_primitives.append(obj)
+                # Graphic primitives belong to components
+                if owner_idx in components_by_altium_index:
+                    components_by_altium_index[owner_idx].graphic_primitives.append(obj)
 
-        # Populate document
-        for _, obj in parsed_objects:
+        # ============================================================
+        # Populate Document
+        # Add all top-level objects to the document.
+        # ============================================================
+        
+        for idx, obj in objects_by_index.items():
             if isinstance(obj, SchSheet):
                 doc.sheet = obj
             elif isinstance(obj, SchComponent):
@@ -125,28 +159,40 @@ class SchDocParser:
             elif isinstance(obj, SchImage):
                 doc.images.append(obj)
             # Free-standing graphics (not owned by a component)
-            elif isinstance(obj, SchPolyline) and obj.owner_index not in components_by_index:
-                doc.polylines.append(obj)
-            elif isinstance(obj, SchPolygon) and obj.owner_index not in components_by_index:
-                doc.polygons.append(obj)
-            elif isinstance(obj, SchRectangle) and obj.owner_index not in components_by_index:
-                doc.rectangles.append(obj)
-            elif isinstance(obj, SchLine) and obj.owner_index not in components_by_index:
-                doc.lines.append(obj)
-            elif isinstance(obj, SchArc) and obj.owner_index not in components_by_index:
-                doc.arcs.append(obj)
-            elif isinstance(obj, SchEllipse) and obj.owner_index not in components_by_index:
-                doc.ellipses.append(obj)
-            elif isinstance(obj, SchRoundRectangle) and obj.owner_index not in components_by_index:
-                doc.round_rectangles.append(obj)
-            elif isinstance(obj, SchBezier) and obj.owner_index not in components_by_index:
-                doc.beziers.append(obj)
-            elif isinstance(obj, SchText) and obj.owner_index not in components_by_index:
-                doc.texts.append(obj)
-            elif isinstance(obj, SchLabel) and obj.owner_index not in components_by_index:
-                doc.labels.append(obj)
+            elif isinstance(obj, SchPolyline):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.polylines.append(obj)
+            elif isinstance(obj, SchPolygon):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.polygons.append(obj)
+            elif isinstance(obj, SchRectangle):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.rectangles.append(obj)
+            elif isinstance(obj, SchLine):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.lines.append(obj)
+            elif isinstance(obj, SchArc):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.arcs.append(obj)
+            elif isinstance(obj, SchEllipse):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.ellipses.append(obj)
+            elif isinstance(obj, SchRoundRectangle):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.round_rectangles.append(obj)
+            elif isinstance(obj, SchBezier):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.beziers.append(obj)
+            elif isinstance(obj, SchText):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.texts.append(obj)
+            elif isinstance(obj, SchLabel):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.labels.append(obj)
 
-        # Extract designators from parameters
+        # ============================================================
+        # Extract refdes from DESIGNATOR parameters (RECORD=34)
+        # ============================================================
         for comp in doc.components:
             for param in comp.parameters:
                 if param.name.upper() == "DESIGNATOR" and not comp.refdes:
@@ -292,6 +338,8 @@ class SchDocParser:
     def _build_component(self, kv: dict[str, str], index: int) -> SchComponent:
         comp = SchComponent()
         comp.owner_index = index
+        # Read Altium's internal INDEX field (used by children's OWNERINDEX to reference this component)
+        comp.altium_index = self._get_int(kv, "INDEX", index)
         comp.lib_reference = kv.get("LIBREFERENCE", "")
         comp.description = kv.get("COMPONENTDESCRIPTION", "")
         comp.source_library = kv.get("SOURCELIBRARY", kv.get("SOURCELIBRARYNAME", ""))
@@ -567,6 +615,8 @@ class SchDocParser:
     def _build_sheet_symbol(self, kv: dict[str, str], index: int) -> SchSheetSymbol:
         ss = SchSheetSymbol()
         ss.owner_index = index
+        # Read Altium's internal INDEX field (used by children's OWNERINDEX to reference this sheet symbol)
+        ss.altium_index = self._get_int(kv, "INDEX", index)
         ss.position = Point2D(
             x_mm=sch_to_mm(self._get_int(kv, "LOCATION.X", 0)),
             y_mm=sch_to_mm(self._get_int(kv, "LOCATION.Y", 0)),

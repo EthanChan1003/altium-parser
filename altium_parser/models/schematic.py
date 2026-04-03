@@ -371,6 +371,7 @@ class SchSheetSymbol:
     file_name: str = ""
     entries: list[SchSheetEntry] = field(default_factory=list)
     owner_index: int = -1
+    altium_index: int = -1  # Altium's internal INDEX field (referenced by children's OWNERINDEX)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -423,6 +424,7 @@ class SchParameter:
 class SchComponent:
     """Schematic component instance."""
     owner_index: int = 0
+    altium_index: int = -1  # Altium's internal INDEX field (referenced by children's OWNERINDEX)
     refdes: str = ""
     lib_reference: str = ""
     position: Point2D = field(default_factory=Point2D)
