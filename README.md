@@ -28,10 +28,11 @@
 | 能力 | 说明 |
 |------|------|
 | 原理图解析 | 元器件、位号、引脚、走线、网络标签、电源端口、图形元素，含完整坐标 |
-| PCB 解析 | 板框、层叠结构、元器件、走线、焊盘、过孔、铜皮、设计规则，含完整坐标 |
+| PCB 解析 | 板框、层叠结构、元器件、走线、圆弧、焊盘、过孔、网络、铜皮、设计规则、3D模型引用，含完整坐标 |
 | 库文件解析 | 原理图符号库、PCB 封装库的完整图元定义 |
 | 工程文件解析 | 工程引用的所有子文档列表 |
 | 双格式输出 | JSON 和 XML，可同时输出 |
+| 可视化查看 | 内置 PCB Viewer 网页版可视化工具 |
 
 ---
 
@@ -402,6 +403,15 @@ OLE Structure: Board.PcbDoc
       "layer": "Top Layer",            //   所在层
       "net": "VCC"                     //   所属网络
     }],
+    "arcs": [{                          // 圆弧
+      "center": {"x_mm": 15, "y_mm": 15},  // 圆心坐标
+      "radius_mm": 5.0,               //   半径（mm）
+      "start_angle": 0,               //   起始角度（度）
+      "end_angle": 180,               //   终止角度（度）
+      "width_mm": 0.254,              //   线宽（mm）
+      "layer": "Top Layer",           //   所在层
+      "net": "GND"                    //   所属网络
+    }],
     "pads": [{                          // 焊盘
       "designator": "1",              //   焊盘编号
       "position": {"x_mm": 12, "y_mm": 12},
@@ -464,6 +474,12 @@ OLE Structure: Board.PcbDoc
       "scope": "All",
       "priority": 1,
       "enabled": true
+    }],
+    "model_3d_refs": [{                 // 3D模型引用
+      "name": "LQFP-64",               //   模型名称
+      "file_path": "Models/LQFP-64.step", //   文件路径
+      "rotation": {"x": 0, "y": 0, "z": 0}, //   旋转角度
+      "offset_mm": {"x": 0, "y": 0, "z": 0}  //   偏移量
     }],
     "statistics": {                     // 统计信息
       "component_count": 25,
@@ -653,6 +669,36 @@ Get-ChildItem $projectDir -Include *.SchDoc,*.PcbDoc,*.SchLib,*.PcbLib -Recurse 
 
 Write-Host "All files parsed to $outputDir"
 ```
+
+### 10.4 使用 PCB Viewer 可视化工具
+
+项目内置了一个基于 HTML5 Canvas 的 PCB 可视化查看器，可以直观地查看解析后的 PCB 数据。
+
+**使用步骤：**
+
+1. 解析 PCB 文件并输出 JSON 到 `viewer` 目录：
+```bash
+altium-parser Board.PcbDoc -o viewer/output.json -f json
+```
+
+2. 启动本地 HTTP 服务器（可选择任意方式）：
+```bash
+# 方式一：Python 内置服务器
+cd viewer
+python -m http.server 8080
+
+# 方式二：Node.js（需安装 http-server）
+npx http-server viewer -p 8080
+```
+
+3. 打开浏览器访问：`http://localhost:8080`
+
+**功能特性：**
+- 图层控制：显示/隐藏走线、焊盘、过孔、圆弧、位号
+- 图层过滤：按层筛选显示内容
+- 交互操作：鼠标拖拽平移、滚轮缩放
+- 实时坐标：显示鼠标位置的 PCB 坐标
+- 颜色图例：不同层用不同颜色区分
 
 ---
 
@@ -856,6 +902,9 @@ parser/
 │   └── serializers/                  # 输出序列化
 │       ├── json_serializer.py        #   JSON 输出
 │       └── xml_serializer.py         #   XML 输出
+├── viewer/                           # PCB 可视化查看器
+│   ├── index.html                    #   HTML5 Canvas 查看器
+│   └── output.json                   #   示例输出数据
 └── tests/                            # 单元测试
     ├── conftest.py                   #   共享测试夹具
     ├── test_binary_reader.py
