@@ -1,0 +1,4 @@
+olefile>=0.46
+
+[dev]
+pytest>=7.0

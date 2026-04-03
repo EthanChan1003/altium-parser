@@ -1,0 +1,2 @@
+[console_scripts]
+altium-parser = altium_parser.cli:main
