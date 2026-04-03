@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .common import Point2D, BoundingBox, model_to_dict
+from .common import Point2D, BoundingBox, model_to_dict, _round_coord
 
 
 @dataclass
@@ -65,6 +65,13 @@ class PcbComponent:
     source_unique_id: str = ""
     bounding_box: BoundingBox = field(default_factory=BoundingBox)
     model_3d_name: str = ""
+    # Child primitives (populated after initial parsing)
+    pads: list[PcbPad] = field(default_factory=list)
+    # Silkscreen primitives (Top Overlay layer elements belonging to this component)
+    silkscreen_tracks: list[PcbTrack] = field(default_factory=list)
+    silkscreen_arcs: list[PcbArc] = field(default_factory=list)
+    # Component texts (Designator, Comment, etc.)
+    texts: list[PcbText] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -79,6 +86,17 @@ class PcbComponent:
         }
         if self.model_3d_name:
             d["model_3d_name"] = self.model_3d_name
+        if self.pads:
+            d["pads"] = [p.to_dict() for p in self.pads]
+        if self.silkscreen_tracks:
+            d["silkscreen_tracks"] = [t.to_dict() for t in self.silkscreen_tracks]
+        if self.silkscreen_arcs:
+            d["silkscreen_arcs"] = [a.to_dict() for a in self.silkscreen_arcs]
+        if self.texts:
+            d["texts"] = [t.to_dict() for t in self.texts]
+        # Always output bounding box if we have any child elements
+        if self.pads or self.silkscreen_tracks or self.silkscreen_arcs or self.texts:
+            d["bounding_box"] = self.bounding_box.to_dict()
         return d
 
 
@@ -98,7 +116,7 @@ class PcbTrack:
         return {
             "start": self.start.to_dict(),
             "end": self.end.to_dict(),
-            "width_mm": self.width_mm,
+            "width_mm": _round_coord(self.width_mm),
             "layer": self.layer,
             "net": self.net,
         }
@@ -121,10 +139,10 @@ class PcbArc:
     def to_dict(self) -> dict[str, Any]:
         return {
             "center": self.center.to_dict(),
-            "radius_mm": self.radius_mm,
-            "start_angle": self.start_angle,
-            "end_angle": self.end_angle,
-            "width_mm": self.width_mm,
+            "radius_mm": _round_coord(self.radius_mm),
+            "start_angle": _round_coord(self.start_angle, 2),
+            "end_angle": _round_coord(self.end_angle, 2),
+            "width_mm": _round_coord(self.width_mm),
             "layer": self.layer,
             "net": self.net,
         }
@@ -155,9 +173,9 @@ class PcbPad:
             "designator": self.designator,
             "position": self.position.to_dict(),
             "top_size": self.top_size.to_dict(),
-            "hole_size_mm": self.hole_size_mm,
+            "hole_size_mm": _round_coord(self.hole_size_mm),
             "shape": self.shape,
-            "rotation": self.rotation,
+            "rotation": _round_coord(self.rotation, 2),
             "layer": self.layer,
             "net": self.net,
             "pad_type": self.pad_type,
@@ -188,8 +206,8 @@ class PcbVia:
     def to_dict(self) -> dict[str, Any]:
         return {
             "position": self.position.to_dict(),
-            "diameter_mm": self.diameter_mm,
-            "hole_mm": self.hole_mm,
+            "diameter_mm": _round_coord(self.diameter_mm),
+            "hole_mm": _round_coord(self.hole_mm),
             "start_layer": self.start_layer,
             "end_layer": self.end_layer,
             "net": self.net,
@@ -213,7 +231,7 @@ class PcbFill:
         return {
             "corner1": self.corner1.to_dict(),
             "corner2": self.corner2.to_dict(),
-            "rotation": self.rotation,
+            "rotation": _round_coord(self.rotation, 2),
             "layer": self.layer,
             "net": self.net,
         }
@@ -304,8 +322,8 @@ class PcbPolygonPour:
             "layer": self.layer,
             "vertices": [v.to_dict() for v in self.vertices],
             "pour_mode": self.pour_mode,
-            "clearance_mm": self.clearance_mm,
-            "min_track_width_mm": self.min_track_width_mm,
+            "clearance_mm": _round_coord(self.clearance_mm),
+            "min_track_width_mm": _round_coord(self.min_track_width_mm),
         }
 
 
@@ -325,8 +343,16 @@ class PcbModel3DRef:
         return {
             "name": self.name,
             "file_path": self.file_path,
-            "rotation": {"x": self.rotation_x, "y": self.rotation_y, "z": self.rotation_z},
-            "offset_mm": {"x": self.offset_x_mm, "y": self.offset_y_mm, "z": self.offset_z_mm},
+            "rotation": {
+                "x": _round_coord(self.rotation_x, 2),
+                "y": _round_coord(self.rotation_y, 2),
+                "z": _round_coord(self.rotation_z, 2),
+            },
+            "offset_mm": {
+                "x": _round_coord(self.offset_x_mm),
+                "y": _round_coord(self.offset_y_mm),
+                "z": _round_coord(self.offset_z_mm),
+            },
         }
 
 

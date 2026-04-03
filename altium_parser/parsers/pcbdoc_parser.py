@@ -29,6 +29,10 @@ RECORD_TYPE_ARC = 0x01
 RECORD_TYPE_PAD = 0x02
 RECORD_TYPE_FILL = 0x06
 
+# Layer IDs for silkscreen (overlay) layers
+LAYER_TOP_OVERLAY = 33
+LAYER_BOTTOM_OVERLAY = 34
+
 # Binary mil to mm conversion factor
 # 1 mil = 0.0254 mm, and binary mil uses 10000 units per mil
 BINARY_MIL_TO_MM = 1.0 / 39.370078740158 / 10000.0
@@ -69,6 +73,23 @@ class PcbDocParser:
             doc.design_rules = self._parse_rules(ole)
             doc.polygon_pours = self._parse_polygons(ole, net_map)
 
+            # === Post-processing ===
+            
+            # A. Build component index map and assign pads to components
+            self._assign_pads_to_components(doc)
+            
+            # B. Assign silkscreen (overlay) tracks and arcs to components
+            self._assign_silkscreen_to_components(doc)
+            
+            # C. Assign texts to components (Designator, Comment, etc.)
+            self._assign_texts_to_components(doc)
+            
+            # D. Calculate bounding box for each component
+            self._calculate_component_bounding_boxes(doc)
+            
+            # E. Extract board outline from mechanical layer tracks
+            self._extract_board_outline(doc)
+
         logger.info(
             "Parsed %s: %d components, %d tracks, %d pads, %d vias, %d nets",
             self._file_path.name,
@@ -76,6 +97,325 @@ class PcbDocParser:
             len(doc.vias), len(doc.nets),
         )
         return doc
+
+    def _assign_pads_to_components(self, doc: PcbDocument) -> None:
+        """Assign pads to their parent components based on component_id.
+        
+        PCB files are flat streams. Pads reference their parent component
+        via component_id. We need to build the hierarchy explicitly.
+        """
+        # Build component index → component map
+        comp_map: dict[int, PcbComponent] = {}
+        for idx, comp in enumerate(doc.components):
+            comp_map[idx] = comp
+        
+        # Assign each pad to its component
+        # Pads with component_id < 0 are not associated with any component
+        standalone_pads = []
+        for pad in doc.pads:
+            if pad.component_id >= 0 and pad.component_id in comp_map:
+                comp_map[pad.component_id].pads.append(pad)
+            else:
+                standalone_pads.append(pad)
+        
+        # Keep only standalone pads in the document-level list
+        doc.pads = standalone_pads
+        
+        logger.debug(
+            "Assigned %d pads to components, %d standalone pads",
+            sum(len(c.pads) for c in doc.components),
+            len(standalone_pads),
+        )
+    
+    def _assign_silkscreen_to_components(self, doc: PcbDocument) -> None:
+        """Assign silkscreen (Top/Bottom Overlay) tracks and arcs to their parent components.
+        
+        Silkscreen elements are identified by:
+        - Layer ID = 33 (Top Overlay) or 34 (Bottom Overlay)
+        - component_id >= 0 (belongs to a component)
+        
+        Elements not belonging to any component remain in the document-level lists.
+        """
+        # Build component index → component map
+        comp_map: dict[int, PcbComponent] = {}
+        for idx, comp in enumerate(doc.components):
+            comp_map[idx] = comp
+        
+        # Process tracks: separate silkscreen from copper, assign to components
+        remaining_tracks = []
+        for track in doc.tracks:
+            # Check if this is a silkscreen layer element
+            if track.layer_id in (LAYER_TOP_OVERLAY, LAYER_BOTTOM_OVERLAY):
+                # Silkscreen element - check if it belongs to a component
+                if track.component_id >= 0 and track.component_id in comp_map:
+                    comp_map[track.component_id].silkscreen_tracks.append(track)
+                else:
+                    # Standalone silkscreen (not belonging to any component)
+                    remaining_tracks.append(track)
+            else:
+                # Non-silkscreen track (copper, mechanical, etc.)
+                remaining_tracks.append(track)
+        
+        doc.tracks = remaining_tracks
+        
+        # Process arcs: separate silkscreen from copper, assign to components
+        remaining_arcs = []
+        for arc in doc.arcs:
+            # Check if this is a silkscreen layer element
+            if arc.layer_id in (LAYER_TOP_OVERLAY, LAYER_BOTTOM_OVERLAY):
+                # Silkscreen element - check if it belongs to a component
+                if arc.component_id >= 0 and arc.component_id in comp_map:
+                    comp_map[arc.component_id].silkscreen_arcs.append(arc)
+                else:
+                    # Standalone silkscreen (not belonging to any component)
+                    remaining_arcs.append(arc)
+            else:
+                # Non-silkscreen arc (copper, mechanical, etc.)
+                remaining_arcs.append(arc)
+        
+        doc.arcs = remaining_arcs
+        
+        silkscreen_track_count = sum(len(c.silkscreen_tracks) for c in doc.components)
+        silkscreen_arc_count = sum(len(c.silkscreen_arcs) for c in doc.components)
+        logger.debug(
+            "Assigned %d silkscreen tracks and %d silkscreen arcs to components",
+            silkscreen_track_count, silkscreen_arc_count,
+        )
+    
+    def _assign_texts_to_components(self, doc: PcbDocument) -> None:
+        """Assign texts to their parent components based on component_id.
+        
+        Texts with component_id >= 0 belong to a component (e.g., Designator, Comment).
+        Texts with component_id < 0 are standalone texts (e.g., board labels, notes).
+        """
+        # Build component index → component map
+        comp_map: dict[int, PcbComponent] = {}
+        for idx, comp in enumerate(doc.components):
+            comp_map[idx] = comp
+        
+        # Assign each text to its component or keep as standalone
+        standalone_texts = []
+        for text in doc.texts:
+            if text.component_id >= 0 and text.component_id in comp_map:
+                comp_map[text.component_id].texts.append(text)
+            else:
+                standalone_texts.append(text)
+        
+        # Keep only standalone texts in the document-level list
+        doc.texts = standalone_texts
+        
+        logger.debug(
+            "Assigned %d texts to components, %d standalone texts",
+            sum(len(c.texts) for c in doc.components),
+            len(standalone_texts),
+        )
+    
+    def _calculate_component_bounding_boxes(self, doc: PcbDocument) -> None:
+        """Calculate bounding box for each component based on its child elements.
+        
+        The bounding box is computed from:
+        - Pad positions and sizes
+        - Silkscreen track endpoints
+        - Silkscreen arc center and radius
+        - Text positions (using text height as approximate size)
+        """
+        for comp in doc.components:
+            xs, ys = [], []
+            
+            # Include pad positions and sizes
+            for pad in comp.pads:
+                # Pad corners (approximate, using top_size)
+                half_w = pad.top_size.x_mm / 2
+                half_h = pad.top_size.y_mm / 2
+                xs.extend([pad.position.x_mm - half_w, pad.position.x_mm + half_w])
+                ys.extend([pad.position.y_mm - half_h, pad.position.y_mm + half_h])
+            
+            # Include silkscreen track endpoints
+            for track in comp.silkscreen_tracks:
+                xs.extend([track.start.x_mm, track.end.x_mm])
+                ys.extend([track.start.y_mm, track.end.y_mm])
+            
+            # Include silkscreen arc bounding box
+            for arc in comp.silkscreen_arcs:
+                # Bounding box of arc: center ± radius
+                xs.extend([arc.center.x_mm - arc.radius_mm, arc.center.x_mm + arc.radius_mm])
+                ys.extend([arc.center.y_mm - arc.radius_mm, arc.center.y_mm + arc.radius_mm])
+            
+            # Include text positions (approximate size based on height)
+            for text in comp.texts:
+                # Approximate text width as 0.6 * height * char_count (rough estimate)
+                text_width = text.height_mm * 0.6 * len(text.content) if text.content else text.height_mm
+                half_w = text_width / 2
+                half_h = text.height_mm / 2
+                xs.extend([text.position.x_mm - half_w, text.position.x_mm + half_w])
+                ys.extend([text.position.y_mm - half_h, text.position.y_mm + half_h])
+            
+            if xs and ys:
+                comp.bounding_box = BoundingBox(
+                    x1_mm=min(xs),
+                    y1_mm=min(ys),
+                    x2_mm=max(xs),
+                    y2_mm=max(ys),
+                )
+    
+    def _extract_board_outline(self, doc: PcbDocument) -> None:
+        """Extract board outline from mechanical layer tracks.
+        
+        Mechanical layers in Altium:
+        - Layer 33: Mechanical 1 (commonly used for board outline)
+        - Layer 69-72: Various mechanical layers
+        
+        Board outline tracks typically don't belong to any component.
+        If no explicit board outline is found, estimate from bounding box.
+        """
+        from collections import defaultdict
+        
+        # Priority: Layer 33 (Mechanical 1) is most commonly used for board outline
+        # Try Layer 33 first, then other mechanical layers
+        PRIORITY_LAYERS = [33, 69, 70, 71, 72]
+        
+        for layer_id in PRIORITY_LAYERS:
+            # Get tracks on this layer that don't belong to components
+            layer_tracks = [
+                t for t in doc.tracks 
+                if t.layer_id == layer_id
+            ]
+            
+            if not layer_tracks:
+                continue
+            
+            # Only use tracks NOT belonging to components for board outline
+            # Component tracks are typically silkscreen, not board edge
+            non_component_tracks = [t for t in layer_tracks if t.component_id < 0]
+            
+            if not non_component_tracks:
+                continue
+            
+            # Try to form a closed polygon
+            vertices = self._connect_tracks_to_polygon(non_component_tracks)
+            
+            if len(vertices) >= 4:  # Valid polygon needs at least 3 vertices + closure
+                doc.board_outline.vertices = vertices
+                logger.debug(
+                    "Extracted board outline from layer %d with %d vertices",
+                    layer_id, len(vertices)
+                )
+                return
+        
+        # Fallback: Estimate board outline from all component positions
+        self._estimate_board_outline_from_components(doc)
+    
+    def _estimate_board_outline_from_components(self, doc: PcbDocument) -> None:
+        """Estimate board outline from component positions and pads."""
+        from altium_parser.models.common import Point2D
+        
+        # Collect all relevant coordinates
+        xs, ys = [], []
+        
+        # Component positions (with margin for component size)
+        for comp in doc.components:
+            xs.append(comp.position.x_mm)
+            ys.append(comp.position.y_mm)
+        
+        # Pads in components
+        for comp in doc.components:
+            for pad in comp.pads:
+                xs.append(pad.position.x_mm)
+                ys.append(pad.position.y_mm)
+        
+        # Standalone pads
+        for pad in doc.pads:
+            xs.append(pad.position.x_mm)
+            ys.append(pad.position.y_mm)
+        
+        # Vias
+        for via in doc.vias:
+            xs.append(via.position.x_mm)
+            ys.append(via.position.y_mm)
+        
+        if len(xs) < 2:
+            return
+        
+        # Create bounding box with small margin
+        margin = 2.0  # 2mm margin
+        x_min = min(xs) - margin
+        x_max = max(xs) + margin
+        y_min = min(ys) - margin
+        y_max = max(ys) + margin
+        
+        # Create rectangular board outline
+        doc.board_outline.vertices = [
+            Point2D(x_mm=x_min, y_mm=y_min),
+            Point2D(x_mm=x_max, y_mm=y_min),
+            Point2D(x_mm=x_max, y_mm=y_max),
+            Point2D(x_mm=x_min, y_mm=y_max),
+        ]
+        
+        logger.debug(
+            "Estimated board outline from components: (%.2f, %.2f) - (%.2f, %.2f)",
+            x_min, y_min, x_max, y_max
+        )
+    
+    def _connect_tracks_to_polygon(self, tracks: list) -> list:
+        """Connect track segments into a closed polygon."""
+        if not tracks:
+            return []
+        
+        from collections import defaultdict
+        
+        # Round coordinates for matching (precision: 0.001mm)
+        def round_point(p) -> tuple[float, float]:
+            return (round(p.x_mm, 3), round(p.y_mm, 3))
+        
+        # Build graph: point → connected points
+        graph: dict[tuple[float, float], list[tuple[float, float]]] = defaultdict(list)
+        for track in tracks:
+            p1 = round_point(track.start)
+            p2 = round_point(track.end)
+            graph[p1].append(p2)
+            graph[p2].append(p1)
+        
+        # Find starting point (prefer points with only 1 connection - polygon endpoints)
+        start = None
+        for p, neighbors in graph.items():
+            if len(neighbors) == 1:  # Endpoint of polygon
+                start = p
+                break
+        
+        # If no endpoint found, start from any point
+        if not start:
+            for p, neighbors in graph.items():
+                if len(neighbors) >= 1:
+                    start = p
+                    break
+        
+        if not start:
+            return []
+        
+        # Traverse the graph to build polygon
+        visited_edges: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+        vertices: list = []
+        current = start
+        
+        while True:
+            from altium_parser.models.common import Point2D
+            vertices.append(Point2D(x_mm=current[0], y_mm=current[1]))
+            
+            # Find next unvisited neighbor
+            next_point = None
+            for neighbor in graph.get(current, []):
+                edge = (min(current, neighbor), max(current, neighbor))
+                if edge not in visited_edges:
+                    visited_edges.add(edge)
+                    next_point = neighbor
+                    break
+            
+            if next_point is None or len(vertices) > len(tracks) + 2:
+                break
+            
+            current = next_point
+        
+        return vertices
 
     # -- Utility: read PcbDoc record stream --
 

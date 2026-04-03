@@ -6,6 +6,15 @@ from dataclasses import dataclass, field, asdict
 from typing import Any
 
 
+# Default coordinate precision (6 decimal places = 0.001µm precision)
+COORDINATE_PRECISION = 6
+
+
+def _round_coord(value: float, precision: int = COORDINATE_PRECISION) -> float:
+    """Round a coordinate value to the specified precision."""
+    return round(value, precision)
+
+
 @dataclass
 class Point2D:
     """A 2D coordinate point."""
@@ -13,7 +22,10 @@ class Point2D:
     y_mm: float = 0.0
 
     def to_dict(self) -> dict[str, float]:
-        return {"x_mm": self.x_mm, "y_mm": self.y_mm}
+        return {
+            "x_mm": _round_coord(self.x_mm),
+            "y_mm": _round_coord(self.y_mm),
+        }
 
 
 @dataclass
@@ -25,8 +37,12 @@ class BoundingBox:
     y2_mm: float = 0.0
 
     def to_dict(self) -> dict[str, float]:
-        return {"x1_mm": self.x1_mm, "y1_mm": self.y1_mm,
-                "x2_mm": self.x2_mm, "y2_mm": self.y2_mm}
+        return {
+            "x1_mm": _round_coord(self.x1_mm),
+            "y1_mm": _round_coord(self.y1_mm),
+            "x2_mm": _round_coord(self.x2_mm),
+            "y2_mm": _round_coord(self.y2_mm),
+        }
 
 
 @dataclass

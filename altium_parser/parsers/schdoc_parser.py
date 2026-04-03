@@ -116,7 +116,11 @@ class SchDocParser:
                     components_by_altium_index[owner_idx].pins.append(obj)
             elif isinstance(obj, SchParameter):
                 if owner_idx in components_by_altium_index:
-                    components_by_altium_index[owner_idx].parameters.append(obj)
+                    comp = components_by_altium_index[owner_idx]
+                    comp.parameters.append(obj)
+                    # Extract Designator from parameter to component's refdes
+                    if obj.name and obj.name.lower() == "designator":
+                        comp.refdes = obj.value
             elif isinstance(obj, SchSheetEntry):
                 if owner_idx in sheet_symbols_by_altium_index:
                     sheet_symbols_by_altium_index[owner_idx].entries.append(obj)
@@ -211,9 +215,15 @@ class SchDocParser:
         return doc
 
     def _parse_records(self, data: bytes) -> list[dict[str, str]]:
-        """Parse all records from the FileHeader stream."""
+        """Parse all records from the FileHeader stream.
+        
+        Returns records with their original position in the file (_record_pos),
+        which is used for OwnerIndex referencing.
+        """
         records: list[dict[str, str]] = []
         reader = BinaryReader(data)
+        
+        record_position = 0  # Track position for OwnerIndex references
 
         while not reader.is_eof():
             if reader.remaining() < 4:
@@ -224,6 +234,7 @@ class SchDocParser:
                 record_type_byte = reader.read_uint8()
 
                 if payload_len == 0:
+                    record_position += 1  # Still counts as a record
                     continue
 
                 if reader.remaining() < payload_len:
@@ -237,12 +248,16 @@ class SchDocParser:
                     # Property-list record
                     payload = reader.read_bytes(payload_len)
                     kv = parse_kv_record(payload)
+                    # Store the record position for OwnerIndex lookup
+                    kv["_record_pos"] = record_position
                     records.append(kv)
                 elif record_type_byte == 1:
                     # Storage/binary record (e.g., embedded image)
                     reader.skip(payload_len)
                 else:
                     reader.skip(payload_len)
+                
+                record_position += 1
 
             except CorruptedDataError as e:
                 logger.warning("Corrupted data at offset %d: %s", reader.tell(), e)
@@ -338,8 +353,11 @@ class SchDocParser:
     def _build_component(self, kv: dict[str, str], index: int) -> SchComponent:
         comp = SchComponent()
         comp.owner_index = index
-        # Read Altium's internal INDEX field (used by children's OWNERINDEX to reference this component)
-        comp.altium_index = self._get_int(kv, "INDEX", index)
+        # In Altium SchDoc, each component is preceded by a "header" record.
+        # Children's OWNERINDEX references this header record's position.
+        # So altium_index = record_pos - 1 (the header record position).
+        record_pos = kv.get("_record_pos", index)
+        comp.altium_index = record_pos - 1 if isinstance(record_pos, int) else index
         comp.lib_reference = kv.get("LIBREFERENCE", "")
         comp.description = kv.get("COMPONENTDESCRIPTION", "")
         comp.source_library = kv.get("SOURCELIBRARY", kv.get("SOURCELIBRARYNAME", ""))
