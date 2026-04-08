@@ -3,774 +3,1210 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCB Viewer</title>
+    <title>Altium Viewer</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            background: #1a1a2e;
-            color: #eee;
-            overflow: hidden;
-        }
-        #controls {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 8px;
-            z-index: 100;
-            font-size: 13px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        #controls h3 {
-            margin-bottom: 10px;
-            color: #4a9eff;
-        }
-        #controls label {
-            display: block;
-            margin: 6px 0;
-            cursor: pointer;
-        }
-        #controls input[type="checkbox"] {
-            margin-right: 8px;
-        }
-        #controls button {
-            margin: 5px 5px 5px 0;
-            padding: 6px 12px;
-            cursor: pointer;
-            background: #4a9eff;
-            border: none;
-            border-radius: 4px;
-            color: white;
-            font-size: 12px;
-        }
-        #controls button:hover {
-            background: #3a8eef;
-        }
-        #controls .section {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #444;
-        }
-        #controls .section-title {
-            font-weight: bold;
-            color: #888;
-            margin-bottom: 5px;
-        }
-        #controls select {
-            width: 100%;
-            padding: 5px;
-            margin-top: 5px;
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 4px;
-        }
-        #info {
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 12px;
-        }
-        #canvas-container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        #pcb-canvas {
-            background: #1a1a2e;
-            cursor: grab;
-        }
-        #pcb-canvas:active {
-            cursor: grabbing;
-        }
-        .color-legend {
-            display: flex;
-            align-items: center;
-            margin: 3px 0;
-        }
-        .color-box {
-            width: 14px;
-            height: 14px;
-            margin-right: 6px;
-            border-radius: 2px;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #1e1e1e; color: #ccc; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        #toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #2d2d2d; border-bottom: 1px solid #444; flex-shrink: 0; z-index: 10; }
+        #toolbar .brand { font-weight: 700; font-size: 15px; color: #4a9eff; margin-right: 8px; }
+        #toolbar button { padding: 5px 12px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #ddd; cursor: pointer; font-size: 12px; white-space: nowrap; }
+        #toolbar button:hover { background: #4a9eff; border-color: #4a9eff; color: #fff; }
+        #toolbar button.active { background: #4a9eff; border-color: #4a9eff; color: #fff; }
+        #toolbar .sep { width: 1px; height: 22px; background: #555; margin: 0 4px; }
+        #toolbar .file-type-badge { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+        .badge-sch { background: #2e7d32; color: #c8e6c9; }
+        .badge-pcb { background: #c62828; color: #ffcdd2; }
+        #drop-overlay { display: none; position: fixed; inset: 0; background: rgba(74,158,255,0.15); border: 3px dashed #4a9eff; z-index: 1000; align-items: center; justify-content: center; font-size: 24px; color: #4a9eff; }
+        #main-area { display: flex; flex: 1; overflow: hidden; }
+        #sidebar { width: 200px; background: #252526; border-right: 1px solid #3c3c3c; overflow-y: auto; flex-shrink: 0; font-size: 12px; }
+        #sidebar .section { padding: 8px 10px; border-bottom: 1px solid #3c3c3c; }
+        #sidebar .section-title { font-weight: 700; color: #888; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; }
+        #sidebar label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+        #sidebar label:hover { color: #fff; }
+        #sidebar input[type="checkbox"] { accent-color: #4a9eff; }
+        #sidebar select { width: 100%; padding: 4px; background: #3c3c3c; color: #ccc; border: 1px solid #555; border-radius: 3px; font-size: 12px; margin-top: 4px; }
+        .color-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 2px; }
+        #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+        #main-canvas { display: block; cursor: grab; }
+        #main-canvas:active { cursor: grabbing; }
+        #statusbar { display: flex; align-items: center; gap: 16px; padding: 3px 12px; background: #007acc; color: #fff; font-size: 11px; flex-shrink: 0; }
+        #statusbar span { white-space: nowrap; }
+        .welcome { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #666; font-size: 16px; gap: 16px; }
+        .welcome .hint { font-size: 13px; color: #555; }
     </style>
 </head>
 <body>
-    <div id="controls">
-        <h3>PCB Viewer</h3>
-        
-        <div class="section">
-            <div class="section-title">图层控制</div>
-            <label>
-                <input type="checkbox" id="showTracks" checked> 显示走线 (Tracks)
-            </label>
-            <label>
-                <input type="checkbox" id="showPads" checked> 显示焊盘 (Pads)
-            </label>
-            <label>
-                <input type="checkbox" id="showVias" checked> 显示过孔 (Vias)
-            </label>
-            <label>
-                <input type="checkbox" id="showArcs" checked> 显示圆弧 (Arcs)
-            </label>
-            <label>
-                <input type="checkbox" id="showComponents" checked> 显示位号 (Components)
-            </label>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">图层过滤</div>
-            <select id="layerFilter">
-                <option value="all">显示所有层</option>
-            </select>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">颜色图例</div>
-            <div class="color-legend">
-                <div class="color-box" style="background: #ffcc00;"></div>
-                <span>Top Layer</span>
-            </div>
-            <div class="color-legend">
-                <div class="color-box" style="background: #00ccff;"></div>
-                <span>Bottom Layer</span>
-            </div>
-            <div class="color-legend">
-                <div class="color-box" style="background: #ff6b6b;"></div>
-                <span>内层 (Inner)</span>
-            </div>
-            <div class="color-legend">
-                <div class="color-box" style="background: #888;"></div>
-                <span>机械层/其他</span>
-            </div>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">视图控制</div>
-            <div>
-                <button id="zoomIn">放大 +</button>
-                <button id="zoomOut">缩小 -</button>
-            </div>
-            <div>
-                <button id="resetView">重置视图</button>
-                <button id="refreshData">刷新数据</button>
-            </div>
-            <div style="margin-top: 8px;">
-                <label>缩放: <span id="scaleValue">10</span> px/mm</label>
-            </div>
-        </div>
-    </div>
-    
-    <div id="info">
-        鼠标拖拽平移 | 滚轮缩放 | 坐标: <span id="coords">-</span>
-    </div>
-    
-    <div id="canvas-container">
-        <canvas id="pcb-canvas"></canvas>
+    <div id="toolbar">
+        <span class="brand">Altium Viewer</span>
+        <div class="sep"></div>
+        <button id="btnLoadSch">原理图 (sch_v2)</button>
+        <button id="btnLoadPcb">PCB (pcb_v2)</button>
+        <div class="sep"></div>
+        <button id="btnOpenFile">打开文件...</button>
+        <input type="file" id="fileInput" accept=".json" style="display:none">
+        <div class="sep"></div>
+        <button id="btnFit">适应窗口</button>
+        <button id="btnZoomIn">放大</button>
+        <button id="btnZoomOut">缩小</button>
+        <div class="sep"></div>
+        <span id="fileTypeBadge" class="file-type-badge" style="display:none"></span>
     </div>
 
-    <script>
-        // 图层颜色映射
-        const LAYER_COLORS = {
-            'top layer': '#ffcc00',
-            'bottom layer': '#00ccff',
-            'top overlay': '#ff00ff',
-            'bottom overlay': '#00ffff',
-            'top solder': '#aa5500',
-            'bottom solder': '#0055aa',
-            'top paste': '#888800',
-            'bottom paste': '#008888',
-            'mechanical': '#666666',
-            'keep out': '#ff0000',
-            'multi-layer': '#cccccc',
-            'drill guide': '#444444',
-            'drill drawing': '#444444'
-        };
+    <div id="drop-overlay">拖放 JSON 文件到此处</div>
 
-        // 获取图层颜色
-        function getLayerColor(layerName) {
-            if (!layerName) return '#888888';
-            const lower = layerName.toLowerCase();
-            
-            // 检查内层
-            if (lower.includes('mid') || lower.includes('inner') || lower.includes('internal')) {
-                return '#ff6b6b';
+    <div id="main-area">
+        <div id="sidebar">
+            <div id="layerControls"></div>
+        </div>
+        <div id="canvas-wrap">
+            <canvas id="main-canvas"></canvas>
+            <div id="welcomeScreen" class="welcome">
+                <div>请加载 JSON 文件</div>
+                <div class="hint">点击上方按钮、拖放文件或使用"打开文件"</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="statusbar">
+        <span id="stFile">未加载文件</span>
+        <span id="stType">-</span>
+        <span id="stCoords">X: - Y: -</span>
+        <span id="stZoom">缩放: -</span>
+        <span id="stStats">-</span>
+    </div>
+
+<script>
+// ===================== LAYER COLORS =====================
+const PCB_LAYER_COLORS = {
+    'top layer': '#FF0000',
+    'bottom layer': '#0000FF',
+    'top overlay': '#FFFF00',
+    'bottom overlay': '#808080',
+    'top solder': '#aa5500',
+    'bottom solder': '#0055aa',
+    'top paste': '#888800',
+    'bottom paste': '#008888',
+    'multi-layer': '#00FF00',
+    'keep out': '#ff4444',
+    'mechanical': '#666666',
+    'drill guide': '#444444',
+    'drill drawing': '#444444'
+};
+function getPcbLayerColor(name) {
+    if (!name) return '#888';
+    const l = name.toLowerCase();
+    if (l.includes('mid') || l.includes('inner') || l.includes('internal')) return '#ff6b6b';
+    for (const [k, c] of Object.entries(PCB_LAYER_COLORS)) { if (l.includes(k)) return c; }
+    return '#888';
+}
+function parseColor(c) {
+    if (!c) return null;
+    if (c.startsWith('#')) return c;
+    return c;
+}
+
+// ===================== BASE RENDERER =====================
+class BaseRenderer {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.scale = 10;
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.minScale = 0.1;
+        this.maxScale = 500;
+        this.isDragging = false;
+        this.lastMX = 0; this.lastMY = 0;
+        this.bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+        this.visibility = {};
+        this.jsonData = null;
+        this._bindEvents();
+    }
+    _bindEvents() {
+        this.canvas.addEventListener('mousedown', e => { 
+            if (this !== activeRenderer) return;
+            e.preventDefault(); 
+            this.isDragging = true; 
+            this.lastMX = e.clientX; 
+            this.lastMY = e.clientY; 
+        });
+        window.addEventListener('mouseup', () => { this.isDragging = false; });
+        window.addEventListener('mousemove', e => {
+            if (this !== activeRenderer) return;
+            if (this.isDragging) {
+                e.preventDefault();
+                this.offsetX += e.clientX - this.lastMX;
+                this.offsetY += e.clientY - this.lastMY;
+                this.lastMX = e.clientX; this.lastMY = e.clientY;
+                this.render();
             }
-            
-            // 精确匹配
-            for (const [key, color] of Object.entries(LAYER_COLORS)) {
-                if (lower.includes(key)) {
-                    return color;
-                }
-            }
-            
-            return '#888888';
+            this._updateCoords(e);
+        });
+        this.canvas.addEventListener('wheel', e => {
+            if (this !== activeRenderer) return;
+            e.preventDefault();
+            const rect = this.canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            const oldS = this.scale;
+            const factor = e.deltaY > 0 ? 0.9 : 1.1;
+            this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * factor));
+            this.offsetX = mx - (mx - this.offsetX) * (this.scale / oldS);
+            this.offsetY = my - (my - this.offsetY) * (this.scale / oldS);
+            this.render();
+            updateStatus();
+        });
+    }
+    _updateCoords(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+        const mmX = (cx - this.offsetX) / this.scale;
+        const mmY = -(cy - this.offsetY) / this.scale;
+        document.getElementById('stCoords').textContent = `X: ${mmX.toFixed(2)} mm  Y: ${mmY.toFixed(2)} mm`;
+    }
+    resize() {
+        const wrap = this.canvas.parentElement;
+        this.canvas.width = wrap.clientWidth;
+        this.canvas.height = wrap.clientHeight;
+    }
+    resetBounds() { this.bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }; }
+    expandBounds(x, y) {
+        if (x < this.bounds.minX) this.bounds.minX = x;
+        if (x > this.bounds.maxX) this.bounds.maxX = x;
+        if (y < this.bounds.minY) this.bounds.minY = y;
+        if (y > this.bounds.maxY) this.bounds.maxY = y;
+    }
+    fitToView() {
+        if (!isFinite(this.bounds.maxX)) return;
+        const pad = 60;
+        const w = this.bounds.maxX - this.bounds.minX || 100;
+        const h = this.bounds.maxY - this.bounds.minY || 100;
+        const sx = (this.canvas.width - pad * 2) / w;
+        const sy = (this.canvas.height - pad * 2) / h;
+        this.scale = Math.min(sx, sy, 200);
+        const centerX = (this.bounds.minX + this.bounds.maxX) / 2;
+        const centerY = (this.bounds.minY + this.bounds.maxY) / 2;
+        this.offsetX = this.canvas.width / 2 - centerX * this.scale;
+        this.offsetY = this.canvas.height / 2 + centerY * this.scale;
+        updateStatus();
+    }
+    toCanvas(x_mm, y_mm) {
+        return { x: x_mm * this.scale + this.offsetX, y: -y_mm * this.scale + this.offsetY };
+    }
+    isVisible(key) { return this.visibility[key] !== false; }
+    render() {}
+    getFilterControls() { return []; }
+}
+
+// ===================== SCHEMATIC RENDERER =====================
+class SchematicRenderer extends BaseRenderer {
+    constructor(canvas) { super(canvas); }
+
+    load(json) {
+        this.jsonData = json;
+        const d = json.data;
+        this.resetBounds();
+        if (d.sheet) {
+            this.expandBounds(0, 0);
+            this.expandBounds(d.sheet.width_mm, d.sheet.height_mm);
+        }
+        // expand from wires, components, etc.
+        if (d.wires) d.wires.forEach(w => w.points && w.points.forEach(p => this.expandBounds(p.x_mm, p.y_mm)));
+        if (d.components) d.components.forEach(c => { if (c.position) this.expandBounds(c.position.x_mm, c.position.y_mm); });
+        if (d.net_labels) d.net_labels.forEach(n => { if (n.position) this.expandBounds(n.position.x_mm, n.position.y_mm); });
+        if (d.power_ports) d.power_ports.forEach(p => { if (p.position) this.expandBounds(p.position.x_mm, p.position.y_mm); });
+        this.fitToView();
+        this.render();
+    }
+
+    getFilterControls() {
+        return [
+            { key: 'wires', label: '导线 (Wires)', default: true },
+            { key: 'buses', label: '总线 (Buses)', default: true },
+            { key: 'net_labels', label: '网络标签 (Net Labels)', default: true },
+            { key: 'power_ports', label: '电源端口 (Power Ports)', default: true },
+            { key: 'components', label: '元件 (Components)', default: true },
+            { key: 'pins', label: '引脚 (Pins)', default: true },
+            { key: 'junctions', label: '结点 (Junctions)', default: true },
+            { key: 'polylines', label: '折线 (Polylines)', default: true },
+            { key: 'polygons', label: '多边形 (Polygons)', default: true },
+            { key: 'rectangles', label: '矩形 (Rectangles)', default: true },
+            { key: 'lines', label: '直线 (Lines)', default: true },
+            { key: 'arcs', label: '圆弧 (Arcs)', default: true },
+            { key: 'ellipses', label: '椭圆 (Ellipses)', default: true },
+            { key: 'elliptical_arcs', label: '椭圆弧', default: true },
+            { key: 'texts', label: '文本 (Texts)', default: true },
+            { key: 'labels', label: '标签 (Labels)', default: true },
+            { key: 'sheet_symbols', label: 'Sheet符号', default: true },
+            { key: 'no_ercs', label: 'No ERC', default: true },
+            { key: 'images', label: '图片 (Images)', default: true },
+        ];
+    }
+
+    render() {
+        const ctx = this.ctx;
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        if (!this.jsonData) return;
+        const d = this.jsonData.data;
+
+        // Draw sheet background
+        if (d.sheet) {
+            const tl = this.toCanvas(0, d.sheet.height_mm);
+            const br = this.toCanvas(d.sheet.width_mm, 0);
+            ctx.fillStyle = '#FAFAF8';
+            ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
         }
 
-        // PCB渲染器类
-        class PCBRenderer {
-            constructor(canvasId) {
-                this.canvas = document.getElementById(canvasId);
-                this.ctx = this.canvas.getContext('2d');
-                
-                // 视图状态
-                this.scale = 10;
-                this.offsetX = 0;
-                this.offsetY = 0;
-                this.minScale = 0.5;
-                this.maxScale = 200;
-                
-                // 数据
-                this.pcbData = null;
-                this.layers = new Set();
-                this.currentLayer = 'all';
-                
-                // 显示选项
-                this.showTracks = true;
-                this.showPads = true;
-                this.showVias = true;
-                this.showArcs = true;
-                this.showComponents = true;
-                
-                // 拖拽状态
-                this.isDragging = false;
-                this.lastMouseX = 0;
-                this.lastMouseY = 0;
-                
-                // 边界
-                this.bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
-                
-                this.initCanvas();
-                this.bindEvents();
+        // Drawing order
+        if (this.isVisible('polylines') && d.polylines) this._drawPolylines(d.polylines);
+        if (this.isVisible('polygons') && d.polygons) this._drawPolygons(d.polygons);
+        if (this.isVisible('rectangles') && d.rectangles) this._drawRectangles(d.rectangles);
+        if (this.isVisible('lines') && d.lines) this._drawLines(d.lines);
+        if (this.isVisible('arcs') && d.arcs) this._drawArcs(d.arcs);
+        if (this.isVisible('ellipses') && d.ellipses) this._drawEllipses(d.ellipses);
+        if (this.isVisible('elliptical_arcs') && d.elliptical_arcs) this._drawEllipticalArcs(d.elliptical_arcs);
+        if (this.isVisible('wires') && d.wires) this._drawWires(d.wires);
+        if (this.isVisible('buses') && d.buses) this._drawBuses(d.buses);
+        if (this.isVisible('components') && d.components) this._drawComponents(d.components);
+        if (this.isVisible('junctions') && d.junctions) this._drawJunctions(d.junctions);
+        if (this.isVisible('net_labels') && d.net_labels) this._drawNetLabels(d.net_labels);
+        if (this.isVisible('power_ports') && d.power_ports) this._drawPowerPorts(d.power_ports);
+        if (this.isVisible('texts') && d.texts) this._drawTexts(d.texts);
+        if (this.isVisible('labels') && d.labels) this._drawLabels(d.labels);
+        if (this.isVisible('sheet_symbols') && d.sheet_symbols) this._drawSheetSymbols(d.sheet_symbols);
+        if (this.isVisible('no_ercs') && d.no_ercs) this._drawNoErcs(d.no_ercs);
+    }
+
+    _drawWires(wires) {
+        const ctx = this.ctx;
+        ctx.strokeStyle = '#008000';
+        ctx.lineWidth = Math.max(1, 1.5 * this.scale / 10);
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        wires.forEach(w => {
+            if (!w.points || w.points.length < 2) return;
+            const color = parseColor(w.color) || '#008000';
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            const p0 = this.toCanvas(w.points[0].x_mm, w.points[0].y_mm);
+            ctx.moveTo(p0.x, p0.y);
+            for (let i = 1; i < w.points.length; i++) {
+                const p = this.toCanvas(w.points[i].x_mm, w.points[i].y_mm);
+                ctx.lineTo(p.x, p.y);
             }
-            
-            initCanvas() {
-                this.canvas.width = window.innerWidth - 20;
-                this.canvas.height = window.innerHeight - 20;
+            ctx.stroke();
+        });
+    }
+
+    _drawBuses(buses) {
+        const ctx = this.ctx;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        buses.forEach(b => {
+            if (!b.points || b.points.length < 2) return;
+            ctx.strokeStyle = parseColor(b.color) || '#000080';
+            ctx.lineWidth = Math.max(3, 3.5 * this.scale / 10);
+            ctx.beginPath();
+            const p0 = this.toCanvas(b.points[0].x_mm, b.points[0].y_mm);
+            ctx.moveTo(p0.x, p0.y);
+            for (let i = 1; i < b.points.length; i++) {
+                const p = this.toCanvas(b.points[i].x_mm, b.points[i].y_mm);
+                ctx.lineTo(p.x, p.y);
             }
-            
-            bindEvents() {
-                // 鼠标拖拽
-                this.canvas.addEventListener('mousedown', (e) => {
-                    this.isDragging = true;
-                    this.lastMouseX = e.clientX;
-                    this.lastMouseY = e.clientY;
-                });
-                
-                window.addEventListener('mouseup', () => {
-                    this.isDragging = false;
-                });
-                
-                window.addEventListener('mousemove', (e) => {
-                    if (this.isDragging) {
-                        const dx = e.clientX - this.lastMouseX;
-                        const dy = e.clientY - this.lastMouseY;
-                        this.offsetX += dx;
-                        this.offsetY += dy;
-                        this.lastMouseX = e.clientX;
-                        this.lastMouseY = e.clientY;
-                        this.render();
-                    }
-                    
-                    // 更新坐标显示
-                    const rect = this.canvas.getBoundingClientRect();
-                    const canvasX = e.clientX - rect.left;
-                    const canvasY = e.clientY - rect.top;
-                    const pcbX = (canvasX - this.offsetX) / this.scale;
-                    const pcbY = -(canvasY - this.offsetY) / this.scale + (this.bounds.maxY || 0);
-                    document.getElementById('coords').textContent = `${pcbX.toFixed(2)}mm, ${pcbY.toFixed(2)}mm`;
-                });
-                
-                // 滚轮缩放
-                this.canvas.addEventListener('wheel', (e) => {
-                    e.preventDefault();
-                    const rect = this.canvas.getBoundingClientRect();
-                    const mouseX = e.clientX - rect.left;
-                    const mouseY = e.clientY - rect.top;
-                    
-                    const oldScale = this.scale;
-                    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-                    this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * delta));
-                    
-                    this.offsetX = mouseX - (mouseX - this.offsetX) * (this.scale / oldScale);
-                    this.offsetY = mouseY - (mouseY - this.offsetY) * (this.scale / oldScale);
-                    
-                    document.getElementById('scaleValue').textContent = this.scale.toFixed(1);
-                    this.render();
-                });
-                
-                // 窗口大小变化
-                window.addEventListener('resize', () => {
-                    this.initCanvas();
-                    this.render();
-                });
+            ctx.stroke();
+        });
+    }
+
+    _drawNetLabels(labels) {
+        const ctx = this.ctx;
+        const fs = Math.max(9, 11 * this.scale / 10);
+        ctx.font = `bold ${fs}px 'Segoe UI', Arial`;
+        ctx.textBaseline = 'bottom';
+        labels.forEach(nl => {
+            const pos = this.toCanvas(nl.position.x_mm, nl.position.y_mm);
+            const color = parseColor(nl.color) || '#800000';
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            if (nl.orientation === 1) ctx.rotate(-Math.PI / 2);
+            else if (nl.orientation === 2) ctx.rotate(-Math.PI);
+            else if (nl.orientation === 3) ctx.rotate(Math.PI / 2);
+            // Small flag background
+            const tw = ctx.measureText(nl.name).width;
+            ctx.fillStyle = '#FFFFF0';
+            ctx.fillRect(-2, -fs - 1, tw + 6, fs + 3);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-2, -fs - 1, tw + 6, fs + 3);
+            ctx.fillStyle = color;
+            ctx.textAlign = 'left';
+            ctx.fillText(nl.name, 1, -1);
+            ctx.restore();
+        });
+    }
+
+    _drawPowerPorts(ports) {
+        const ctx = this.ctx;
+        const s = Math.max(4, 5 * this.scale / 10);
+        ports.forEach(pp => {
+            const pos = this.toCanvas(pp.position.x_mm, pp.position.y_mm);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            // orientation: 0=right, 1=up, 2=left, 3=down
+            const rot = [0, -Math.PI/2, Math.PI, Math.PI/2];
+            ctx.rotate(rot[pp.orientation] || 0);
+            const isGnd = pp.style === 'earth' || pp.style === 'gnd' || pp.style === 'signal_ground' || pp.style === 'power_gnd';
+            const isVcc = !isGnd;
+            ctx.strokeStyle = '#000';
+            ctx.fillStyle = '#000';
+            ctx.lineWidth = Math.max(1, 1.2 * this.scale / 10);
+            if (isGnd) {
+                // GND: line down then triangle/bars
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, s * 2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-s * 1.5, s * 2); ctx.lineTo(s * 1.5, s * 2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-s, s * 2.6); ctx.lineTo(s, s * 2.6); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-s * 0.5, s * 3.2); ctx.lineTo(s * 0.5, s * 3.2); ctx.stroke();
+            } else {
+                // VCC/Power: line up then bar
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s * 2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-s * 1.5, -s * 2); ctx.lineTo(s * 1.5, -s * 2); ctx.stroke();
             }
-            
-            async loadData(jsonPath) {
-                try {
-                    // 添加时间戳防止缓存
-                    const url = `${jsonPath}?t=${Date.now()}`;
-                    const response = await fetch(url, {
-                        headers: { 'Cache-Control': 'no-cache' }
-                    });
-                    this.pcbData = await response.json();
-                    this.collectLayers();
-                    this.calculateBounds();
-                    this.fitToView();
-                    this.render();
-                    console.log('数据加载成功:', this.pcbData);
-                } catch (error) {
-                    console.error('加载数据失败:', error);
-                }
-            }
-            
-            collectLayers() {
-                const data = this.pcbData?.data;
-                if (!data) return;
-                
-                // 从tracks收集图层
-                if (data.tracks) {
-                    data.tracks.forEach(t => {
-                        if (t.layer) this.layers.add(t.layer);
-                    });
-                }
-                
-                // 从pads收集图层
-                if (data.pads) {
-                    data.pads.forEach(p => {
-                        if (p.layer) this.layers.add(p.layer);
-                    });
-                }
-                
-                // 从arcs收集图层
-                if (data.arcs) {
-                    data.arcs.forEach(a => {
-                        if (a.layer) this.layers.add(a.layer);
-                    });
-                }
-                
-                // 更新图层下拉框
-                const select = document.getElementById('layerFilter');
-                select.innerHTML = '<option value="all">显示所有层</option>';
-                this.layers.forEach(layer => {
-                    const option = document.createElement('option');
-                    option.value = layer;
-                    option.textContent = layer;
-                    select.appendChild(option);
-                });
-            }
-            
-            calculateBounds() {
-                const data = this.pcbData?.data;
-                if (!data) return;
-                
-                const updateBounds = (x, y) => {
-                    this.bounds.minX = Math.min(this.bounds.minX, x);
-                    this.bounds.maxX = Math.max(this.bounds.maxX, x);
-                    this.bounds.minY = Math.min(this.bounds.minY, y);
-                    this.bounds.maxY = Math.max(this.bounds.maxY, y);
-                };
-                
-                // tracks
-                if (data.tracks) {
-                    data.tracks.forEach(t => {
-                        if (t.start) updateBounds(t.start.x_mm, t.start.y_mm);
-                        if (t.end) updateBounds(t.end.x_mm, t.end.y_mm);
-                    });
-                }
-                
-                // pads
-                if (data.pads) {
-                    data.pads.forEach(p => {
-                        if (p.position) updateBounds(p.position.x_mm, p.position.y_mm);
-                    });
-                }
-                
-                // vias
-                if (data.vias) {
-                    data.vias.forEach(v => {
-                        if (v.position) updateBounds(v.position.x_mm, v.position.y_mm);
-                    });
-                }
-                
-                // arcs
-                if (data.arcs) {
-                    data.arcs.forEach(a => {
-                        if (a.center) {
-                            const r = a.radius_mm || 0;
-                            updateBounds(a.center.x_mm - r, a.center.y_mm - r);
-                            updateBounds(a.center.x_mm + r, a.center.y_mm + r);
-                        }
-                    });
-                }
-                
-                // components
-                if (data.components) {
-                    data.components.forEach(c => {
-                        if (c.position) updateBounds(c.position.x_mm, c.position.y_mm);
-                    });
-                }
-                
-                console.log('边界:', this.bounds);
-            }
-            
-            fitToView() {
-                if (!isFinite(this.bounds.maxX)) return;
-                
-                const padding = 80;
-                const width = this.bounds.maxX - this.bounds.minX || 100;
-                const height = this.bounds.maxY - this.bounds.minY || 100;
-                
-                const scaleX = (this.canvas.width - padding * 2) / width;
-                const scaleY = (this.canvas.height - padding * 2) / height;
-                this.scale = Math.min(scaleX, scaleY, 100);
-                
-                this.offsetX = padding - this.bounds.minX * this.scale;
-                this.offsetY = padding - (this.bounds.maxY - this.bounds.minY) * this.scale;
-                
-                document.getElementById('scaleValue').textContent = this.scale.toFixed(1);
-            }
-            
-            pcbToCanvas(x_mm, y_mm) {
-                const canvasX = x_mm * this.scale + this.offsetX;
-                const canvasY = -(y_mm - this.bounds.maxY) * this.scale + this.offsetY;
-                return { x: canvasX, y: canvasY };
-            }
-            
-            shouldShowLayer(layer) {
-                if (this.currentLayer === 'all') return true;
-                return layer === this.currentLayer;
-            }
-            
-            render() {
-                const ctx = this.ctx;
-                
-                // 清空画布
-                ctx.fillStyle = '#1a1a2e';
-                ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                if (!this.pcbData) return;
-                
-                const data = this.pcbData.data;
-                
-                // 绘制网格
-                this.drawGrid();
-                
-                // 按顺序绘制各元素
-                if (this.showTracks && data.tracks) {
-                    this.drawTracks(data.tracks);
-                }
-                
-                if (this.showArcs && data.arcs) {
-                    this.drawArcs(data.arcs);
-                }
-                
-                if (this.showPads && data.pads) {
-                    this.drawPads(data.pads);
-                }
-                
-                if (this.showVias && data.vias) {
-                    this.drawVias(data.vias);
-                }
-                
-                if (this.showComponents && data.components) {
-                    this.drawComponents(data.components);
-                }
-                
-                // 绘制信息面板
-                this.drawInfo();
-            }
-            
-            drawGrid() {
-                const ctx = this.ctx;
-                
-                // 动态网格间距
-                let gridSpacing = 10;
-                if (this.scale < 5) gridSpacing = 50;
-                else if (this.scale < 2) gridSpacing = 100;
-                else if (this.scale > 30) gridSpacing = 5;
-                else if (this.scale > 60) gridSpacing = 1;
-                
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-                ctx.lineWidth = 0.5;
-                
-                const startX = Math.floor(this.bounds.minX / gridSpacing) * gridSpacing;
-                const startY = Math.floor(this.bounds.minY / gridSpacing) * gridSpacing;
-                
-                // 垂直线
-                for (let x = startX; x <= this.bounds.maxX; x += gridSpacing) {
-                    const pos = this.pcbToCanvas(x, this.bounds.minY);
-                    ctx.beginPath();
-                    ctx.moveTo(pos.x, 0);
-                    ctx.lineTo(pos.x, this.canvas.height);
-                    ctx.stroke();
-                }
-                
-                // 水平线
-                for (let y = startY; y <= this.bounds.maxY; y += gridSpacing) {
-                    const pos = this.pcbToCanvas(this.bounds.minX, y);
-                    ctx.beginPath();
-                    ctx.moveTo(0, pos.y);
-                    ctx.lineTo(this.canvas.width, pos.y);
-                    ctx.stroke();
-                }
-            }
-            
-            drawTracks(tracks) {
-                const ctx = this.ctx;
-                
-                tracks.forEach(track => {
-                    if (!this.shouldShowLayer(track.layer)) return;
-                    
-                    const start = this.pcbToCanvas(track.start.x_mm, track.start.y_mm);
-                    const end = this.pcbToCanvas(track.end.x_mm, track.end.y_mm);
-                    const width = Math.max(track.width_mm * this.scale, 1);
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(start.x, start.y);
-                    ctx.lineTo(end.x, end.y);
-                    ctx.strokeStyle = getLayerColor(track.layer);
-                    ctx.lineWidth = width;
-                    ctx.lineCap = 'round';
-                    ctx.stroke();
-                });
-            }
-            
-            drawArcs(arcs) {
-                const ctx = this.ctx;
-                
-                arcs.forEach(arc => {
-                    if (!this.shouldShowLayer(arc.layer)) return;
-                    
-                    const center = this.pcbToCanvas(arc.center.x_mm, arc.center.y_mm);
-                    const radius = arc.radius_mm * this.scale;
-                    const width = Math.max(arc.width_mm * this.scale, 1);
-                    
-                    // 角度转换 (PCB角度 -> Canvas角度)
-                    let startAngle = (arc.start_angle || 0) * Math.PI / 180;
-                    let endAngle = (arc.end_angle || 360) * Math.PI / 180;
-                    
-                    // 处理整圆
-                    if (Math.abs(arc.end_angle - arc.start_angle) >= 360 || 
-                        (arc.start_angle === 0 && arc.end_angle === 360)) {
+            // Label
+            const fs = Math.max(8, 9 * this.scale / 10);
+            ctx.font = `bold ${fs}px Arial`;
+            ctx.fillStyle = '#800000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = isGnd ? 'top' : 'bottom';
+            const labelY = isGnd ? s * 3.5 : -s * 2.5;
+            ctx.fillText(pp.name, 0, labelY);
+            ctx.restore();
+        });
+    }
+
+    _drawComponents(comps) {
+        const ctx = this.ctx;
+        comps.forEach(comp => {
+            if (!comp.position) return;
+            // Collect pin positions to determine component bounding box
+            let pins = comp.pins || [];
+            let minPX = Infinity, maxPX = -Infinity, minPY = Infinity, maxPY = -Infinity;
+            pins.forEach(pin => {
+                if (!pin.position) return;
+                this.expandBounds(pin.position.x_mm, pin.position.y_mm);
+                const dx = pin.position.x_mm;
+                const dy = pin.position.y_mm;
+                if (dx < minPX) minPX = dx; if (dx > maxPX) maxPX = dx;
+                if (dy < minPY) minPY = dy; if (dy > maxPY) maxPY = dy;
+            });
+
+            // Draw graphic primitives (lines within component)
+            if (comp.graphic_primitives) {
+                comp.graphic_primitives.forEach(gp => {
+                    if (gp.start && gp.end) {
+                        const s = this.toCanvas(gp.start.x_mm, gp.start.y_mm);
+                        const e = this.toCanvas(gp.end.x_mm, gp.end.y_mm);
                         ctx.beginPath();
-                        ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
-                        ctx.strokeStyle = getLayerColor(arc.layer);
-                        ctx.lineWidth = width;
-                        ctx.stroke();
-                    } else {
-                        ctx.beginPath();
-                        ctx.arc(center.x, center.y, radius, startAngle, endAngle);
-                        ctx.strokeStyle = getLayerColor(arc.layer);
-                        ctx.lineWidth = width;
+                        ctx.moveTo(s.x, s.y);
+                        ctx.lineTo(e.x, e.y);
+                        ctx.strokeStyle = parseColor(gp.color) || '#800000';
+                        ctx.lineWidth = Math.max(1, (gp.line_width || 1) * this.scale / 15);
                         ctx.stroke();
                     }
                 });
             }
-            
-            drawPads(pads) {
-                const ctx = this.ctx;
-                
-                pads.forEach(pad => {
-                    if (!this.shouldShowLayer(pad.layer)) return;
-                    
-                    const pos = this.pcbToCanvas(pad.position.x_mm, pad.position.y_mm);
-                    const sizeX = (pad.top_size?.x_mm || 1) * this.scale;
-                    const sizeY = (pad.top_size?.y_mm || 1) * this.scale;
-                    const holeSize = (pad.hole_size_mm || 0) * this.scale;
-                    
-                    ctx.save();
-                    ctx.translate(pos.x, pos.y);
-                    ctx.rotate((pad.rotation || 0) * Math.PI / 180);
-                    
-                    // 焊盘颜色
-                    const color = getLayerColor(pad.layer);
-                    
-                    if (pad.shape === 'rectangular' || pad.shape === 'rounded_rect') {
-                        // 矩形焊盘
-                        ctx.beginPath();
-                        const r = pad.shape === 'rounded_rect' ? Math.min(sizeX, sizeY) * 0.2 : 0;
-                        ctx.roundRect(-sizeX / 2, -sizeY / 2, sizeX, sizeY, r);
-                        ctx.fillStyle = color;
-                        ctx.fill();
-                    } else if (pad.shape === 'circular' || pad.shape === 'circle') {
-                        // 圆形焊盘
-                        const radius = Math.max(sizeX / 2, 1);
-                        ctx.beginPath();
-                        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-                        ctx.fillStyle = color;
-                        ctx.fill();
-                    } else if (pad.shape === 'oval' || pad.shape === 'elliptical') {
-                        // 椭圆焊盘
-                        ctx.beginPath();
-                        ctx.ellipse(0, 0, sizeX / 2, sizeY / 2, 0, 0, Math.PI * 2);
-                        ctx.fillStyle = color;
-                        ctx.fill();
-                    } else {
-                        // 默认矩形
-                        ctx.fillStyle = color;
-                        ctx.fillRect(-sizeX / 2, -sizeY / 2, sizeX, sizeY);
-                    }
-                    
-                    // 绘制孔
-                    if (holeSize > 1) {
-                        ctx.beginPath();
-                        ctx.arc(0, 0, holeSize / 2, 0, Math.PI * 2);
-                        ctx.fillStyle = '#1a1a2e';
-                        ctx.fill();
-                    }
-                    
-                    ctx.restore();
-                });
-            }
-            
-            drawVias(vias) {
-                const ctx = this.ctx;
-                
-                vias.forEach(via => {
-                    const pos = this.pcbToCanvas(via.position.x_mm, via.position.y_mm);
-                    const outerRadius = Math.max((via.diameter_mm / 2) * this.scale, 2);
-                    const innerRadius = Math.max((via.hole_mm / 2) * this.scale, 1);
-                    
-                    // 外圈（铜）
+
+            // Draw pins
+            if (this.isVisible('pins')) {
+                const pinLen = 5.08 * this.scale;
+                pins.forEach(pin => {
+                    if (!pin.position || pin.is_hidden) return;
+                    const pp = this.toCanvas(pin.position.x_mm, pin.position.y_mm);
+                    const len = (pin.length_mm || 5.08) * this.scale;
+                    let ex = pp.x, ey = pp.y;
+                    // orientation: 0=right, 1=up, 2=left, 3=down (direction the pin points FROM component)
+                    if (pin.orientation === 0) ex = pp.x + len;
+                    else if (pin.orientation === 1) ey = pp.y - len;
+                    else if (pin.orientation === 2) ex = pp.x - len;
+                    else if (pin.orientation === 3) ey = pp.y + len;
                     ctx.beginPath();
-                    ctx.arc(pos.x, pos.y, outerRadius, 0, Math.PI * 2);
-                    ctx.fillStyle = '#cccccc';
-                    ctx.fill();
-                    
-                    // 内圈（孔）
-                    ctx.beginPath();
-                    ctx.arc(pos.x, pos.y, innerRadius, 0, Math.PI * 2);
-                    ctx.fillStyle = '#1a1a2e';
-                    ctx.fill();
-                });
-            }
-            
-            drawComponents(components) {
-                const ctx = this.ctx;
-                const fontSize = Math.max(8, Math.min(14, 12 * this.scale / 10));
-                
-                components.forEach(comp => {
-                    const pos = this.pcbToCanvas(comp.position.x_mm, comp.position.y_mm);
-                    
-                    ctx.save();
-                    ctx.translate(pos.x, pos.y);
-                    
-                    if (comp.rotation) {
-                        ctx.rotate(-comp.rotation * Math.PI / 180);
-                    }
-                    
-                    ctx.font = `bold ${fontSize}px Arial`;
-                    ctx.textAlign = 'center';
+                    ctx.moveTo(pp.x, pp.y);
+                    ctx.lineTo(ex, ey);
+                    ctx.strokeStyle = '#800000';
+                    ctx.lineWidth = Math.max(1, 1 * this.scale / 10);
+                    ctx.stroke();
+                    // Pin name
+                    const fs = Math.max(7, 8 * this.scale / 10);
+                    ctx.font = `${fs}px Arial`;
+                    ctx.fillStyle = '#333';
                     ctx.textBaseline = 'middle';
-                    
-                    // 描边
-                    ctx.strokeStyle = '#000';
-                    ctx.lineWidth = 2;
-                    ctx.strokeText(comp.designator, 0, 0);
-                    
-                    // 填充
-                    ctx.fillStyle = comp.layer === 'top' ? '#00ff88' : '#ff8800';
-                    ctx.fillText(comp.designator, 0, 0);
-                    
-                    ctx.restore();
+                    if (pin.orientation === 0 || pin.orientation === 2) {
+                        ctx.textAlign = pin.orientation === 0 ? 'left' : 'right';
+                        const tx = pin.orientation === 0 ? pp.x + 3 : pp.x - 3;
+                        ctx.fillText(pin.name || '', tx, pp.y);
+                    } else {
+                        ctx.save();
+                        ctx.translate(pp.x, pp.y);
+                        ctx.rotate(-Math.PI / 2);
+                        ctx.textAlign = pin.orientation === 1 ? 'left' : 'right';
+                        ctx.fillText(pin.name || '', 3, 0);
+                        ctx.restore();
+                    }
+                    // Pin number (small, near pin end)
+                    ctx.font = `${Math.max(6, 7 * this.scale / 10)}px Arial`;
+                    ctx.fillStyle = '#008000';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(pin.number || '', (pp.x + ex) / 2, (pp.y + ey) / 2 - fs * 0.6);
                 });
             }
-            
-            drawInfo() {
-                const ctx = this.ctx;
-                const data = this.pcbData?.data;
-                
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(this.canvas.width - 160, 10, 150, 100);
-                
-                ctx.font = '11px Arial';
-                ctx.fillStyle = '#fff';
-                ctx.textAlign = 'left';
-                
-                let y = 26;
-                ctx.fillText(`文件: ${this.pcbData?.source_file || '-'}`, this.canvas.width - 150, y);
-                y += 16;
-                ctx.fillText(`走线: ${data?.tracks?.length || 0}`, this.canvas.width - 150, y);
-                y += 14;
-                ctx.fillText(`焊盘: ${data?.pads?.length || 0}`, this.canvas.width - 150, y);
-                y += 14;
-                ctx.fillText(`过孔: ${data?.vias?.length || 0}`, this.canvas.width - 150, y);
-                y += 14;
-                ctx.fillText(`组件: ${data?.components?.length || 0}`, this.canvas.width - 150, y);
-                y += 14;
-                ctx.fillText(`网络: ${data?.nets?.length || 0}`, this.canvas.width - 150, y);
+
+            // Refdes label
+            const pos = this.toCanvas(comp.position.x_mm, comp.position.y_mm);
+            const fs = Math.max(9, 11 * this.scale / 10);
+            ctx.font = `bold ${fs}px Arial`;
+            ctx.fillStyle = '#000080';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(comp.refdes || '', pos.x, pos.y - 4);
+
+            // Comment/value from visible params
+            if (comp.parameters) {
+                const vis = comp.parameters.filter(p => !p.is_hidden && (p.name === 'Comment' || p.name === 'Value'));
+                if (vis.length > 0) {
+                    ctx.font = `${Math.max(8, 9 * this.scale / 10)}px Arial`;
+                    ctx.fillStyle = '#444';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(vis[0].value || '', pos.x, pos.y + 4);
+                }
             }
+        });
+    }
+
+    _drawJunctions(junctions) {
+        const ctx = this.ctx;
+        const r = Math.max(2.5, 3.5 * this.scale / 10);
+        junctions.forEach(j => {
+            const pos = this.toCanvas(j.position.x_mm, j.position.y_mm);
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = parseColor(j.color) || '#008000';
+            ctx.fill();
+        });
+    }
+
+    _drawPolylines(polylines) {
+        const ctx = this.ctx;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        polylines.forEach(pl => {
+            if (!pl.points || pl.points.length < 2) return;
+            ctx.strokeStyle = parseColor(pl.color) || '#000';
+            ctx.lineWidth = Math.max(1, (pl.line_width || 1) * this.scale / 15);
+            ctx.beginPath();
+            const p0 = this.toCanvas(pl.points[0].x_mm, pl.points[0].y_mm);
+            ctx.moveTo(p0.x, p0.y);
+            for (let i = 1; i < pl.points.length; i++) {
+                const p = this.toCanvas(pl.points[i].x_mm, pl.points[i].y_mm);
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+        });
+    }
+
+    _drawPolygons(polygons) {
+        const ctx = this.ctx;
+        polygons.forEach(pg => {
+            if (!pg.points || pg.points.length < 3) return;
+            ctx.beginPath();
+            const p0 = this.toCanvas(pg.points[0].x_mm, pg.points[0].y_mm);
+            ctx.moveTo(p0.x, p0.y);
+            for (let i = 1; i < pg.points.length; i++) {
+                const p = this.toCanvas(pg.points[i].x_mm, pg.points[i].y_mm);
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = parseColor(pg.fill_color || pg.color) || 'rgba(0,0,255,0.1)';
+            ctx.fill();
+            ctx.strokeStyle = parseColor(pg.color) || '#000';
+            ctx.lineWidth = Math.max(1, (pg.line_width || 1) * this.scale / 15);
+            ctx.stroke();
+        });
+    }
+
+    _drawRectangles(rects) {
+        const ctx = this.ctx;
+        rects.forEach(r => {
+            if (!r.corner1 || !r.corner2) return;
+            const c1 = this.toCanvas(r.corner1.x_mm, r.corner1.y_mm);
+            const c2 = this.toCanvas(r.corner2.x_mm, r.corner2.y_mm);
+            const x = Math.min(c1.x, c2.x), y = Math.min(c1.y, c2.y);
+            const w = Math.abs(c2.x - c1.x), h = Math.abs(c2.y - c1.y);
+            if (r.is_filled || r.fill_color) {
+                ctx.fillStyle = parseColor(r.fill_color || r.color) || 'rgba(255,255,0,0.2)';
+                ctx.fillRect(x, y, w, h);
+            }
+            ctx.strokeStyle = parseColor(r.color) || '#000';
+            ctx.lineWidth = Math.max(1, (r.line_width || 1) * this.scale / 15);
+            ctx.strokeRect(x, y, w, h);
+        });
+    }
+
+    _drawLines(lines) {
+        const ctx = this.ctx;
+        lines.forEach(ln => {
+            if (!ln.start || !ln.end) return;
+            const s = this.toCanvas(ln.start.x_mm, ln.start.y_mm);
+            const e = this.toCanvas(ln.end.x_mm, ln.end.y_mm);
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(e.x, e.y);
+            ctx.strokeStyle = parseColor(ln.color) || '#000';
+            ctx.lineWidth = Math.max(1, (ln.line_width || 1) * this.scale / 15);
+            ctx.stroke();
+        });
+    }
+
+    _drawArcs(arcs) {
+        const ctx = this.ctx;
+        arcs.forEach(a => {
+            if (!a.center) return;
+            const c = this.toCanvas(a.center.x_mm, a.center.y_mm);
+            const r = (a.radius_mm || 1) * this.scale;
+            const sa = -(a.start_angle || 0) * Math.PI / 180;
+            const ea = -(a.end_angle || 360) * Math.PI / 180;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, r, sa, ea, true);
+            ctx.strokeStyle = parseColor(a.color) || '#000';
+            ctx.lineWidth = Math.max(1, (a.line_width || 1) * this.scale / 15);
+            ctx.stroke();
+        });
+    }
+
+    _drawEllipses(ellipses) {
+        const ctx = this.ctx;
+        ellipses.forEach(el => {
+            if (!el.center) return;
+            const c = this.toCanvas(el.center.x_mm, el.center.y_mm);
+            const rx = (el.radius_x_mm || 1) * this.scale;
+            const ry = (el.radius_y_mm || 1) * this.scale;
+            ctx.beginPath();
+            ctx.ellipse(c.x, c.y, rx, ry, 0, 0, Math.PI * 2);
+            ctx.fillStyle = parseColor(el.fill_color || el.color) || 'rgba(0,0,200,0.15)';
+            ctx.fill();
+            ctx.strokeStyle = parseColor(el.color) || '#000';
+            ctx.lineWidth = Math.max(1, (el.line_width || 1) * this.scale / 15);
+            ctx.stroke();
+        });
+    }
+
+    _drawEllipticalArcs(arcs) {
+        const ctx = this.ctx;
+        arcs.forEach(a => {
+            if (!a.center) return;
+            const c = this.toCanvas(a.center.x_mm, a.center.y_mm);
+            const rx = (a.radius_x_mm || 1) * this.scale;
+            const ry = (a.radius_y_mm || 1) * this.scale;
+            const rot = (a.rotation_angle || 0) * Math.PI / 180;
+            const sa = -(a.start_angle || 0) * Math.PI / 180;
+            const ea = -(a.end_angle || 360) * Math.PI / 180;
+            ctx.beginPath();
+            ctx.ellipse(c.x, c.y, rx, ry, -rot, sa, ea, true);
+            ctx.strokeStyle = parseColor(a.color) || '#000';
+            ctx.lineWidth = Math.max(1, (a.line_width || 1) * this.scale / 15);
+            ctx.stroke();
+        });
+    }
+
+    _drawTexts(texts) {
+        const ctx = this.ctx;
+        texts.forEach(t => {
+            const text = t.content ?? t.text;
+            if (!t.position || !text) return;
+            const pos = this.toCanvas(t.position.x_mm, t.position.y_mm);
+            const fs = Math.max(8, (t.font_size || 10) * this.scale / 10);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            if (t.orientation === 1) ctx.rotate(-Math.PI / 2);
+            else if (t.orientation === 2) ctx.rotate(Math.PI);
+            else if (t.orientation === 3) ctx.rotate(Math.PI / 2);
+            ctx.font = `${fs}px Arial`;
+            ctx.fillStyle = parseColor(t.color) || '#000';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(text, 0, 0);
+            ctx.restore();
+        });
+    }
+
+    _drawLabels(labels) {
+        const ctx = this.ctx;
+        labels.forEach(lb => {
+            if (!lb.position || !lb.text) return;
+            const pos = this.toCanvas(lb.position.x_mm, lb.position.y_mm);
+            const fs = Math.max(9, 12 * this.scale / 10);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            if (lb.orientation === 1) ctx.rotate(-Math.PI / 2);
+            else if (lb.orientation === 2) ctx.rotate(Math.PI);
+            else if (lb.orientation === 3) ctx.rotate(Math.PI / 2);
+            ctx.font = `bold ${fs}px Arial`;
+            ctx.fillStyle = parseColor(lb.color) || '#000080';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(lb.text, 0, 0);
+            ctx.restore();
+        });
+    }
+
+    _drawSheetSymbols(symbols) {
+        const ctx = this.ctx;
+        symbols.forEach(ss => {
+            if (!ss.position) return;
+            const pos = this.toCanvas(ss.position.x_mm, ss.position.y_mm);
+            const w = (ss.width_mm || 30) * this.scale;
+            const h = (ss.height_mm || 20) * this.scale;
+            ctx.strokeStyle = '#800080';
+            ctx.lineWidth = Math.max(1, 2 * this.scale / 10);
+            ctx.strokeRect(pos.x, pos.y - h, w, h);
+            ctx.fillStyle = 'rgba(128,0,128,0.05)';
+            ctx.fillRect(pos.x, pos.y - h, w, h);
+            // Title
+            const fs = Math.max(9, 11 * this.scale / 10);
+            ctx.font = `bold ${fs}px Arial`;
+            ctx.fillStyle = '#800080';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(ss.name || ss.sheet_name || '', pos.x + 4, pos.y - h + 2);
+            // Entries
+            if (ss.entries) {
+                const efs = Math.max(7, 8 * this.scale / 10);
+                ctx.font = `${efs}px Arial`;
+                ss.entries.forEach((entry, i) => {
+                    const ey = pos.y - h + 20 + i * 14;
+                    ctx.fillStyle = '#333';
+                    ctx.fillText(entry.name || '', pos.x + 6, ey);
+                });
+            }
+        });
+    }
+
+    _drawNoErcs(noercs) {
+        const ctx = this.ctx;
+        const s = Math.max(4, 5 * this.scale / 10);
+        noercs.forEach(ne => {
+            if (!ne.position) return;
+            const pos = this.toCanvas(ne.position.x_mm, ne.position.y_mm);
+            ctx.strokeStyle = '#00AA00';
+            ctx.lineWidth = Math.max(1, 1.5 * this.scale / 10);
+            ctx.beginPath(); ctx.moveTo(pos.x - s, pos.y - s); ctx.lineTo(pos.x + s, pos.y + s); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(pos.x + s, pos.y - s); ctx.lineTo(pos.x - s, pos.y + s); ctx.stroke();
+        });
+    }
+}
+
+// ===================== PCB RENDERER =====================
+class PCBRenderer extends BaseRenderer {
+    constructor(canvas) {
+        super(canvas);
+        this.layers = new Set();
+        this.currentLayer = 'all';
+    }
+
+    load(json) {
+        this.jsonData = json;
+        const d = json.data;
+        this.resetBounds();
+        this.layers.clear();
+
+        // board outline
+        if (d.board_outline && d.board_outline.vertices) {
+            d.board_outline.vertices.forEach(v => this.expandBounds(v.x_mm, v.y_mm));
         }
-        
-        // 初始化
-        const renderer = new PCBRenderer('pcb-canvas');
-        renderer.loadData('output.json');
-        
-        // 控制事件
-        document.getElementById('showTracks').addEventListener('change', (e) => {
-            renderer.showTracks = e.target.checked;
-            renderer.render();
+        if (d.tracks) d.tracks.forEach(t => {
+            if (t.start) this.expandBounds(t.start.x_mm, t.start.y_mm);
+            if (t.end) this.expandBounds(t.end.x_mm, t.end.y_mm);
+            if (t.layer) this.layers.add(t.layer);
         });
-        
-        document.getElementById('showPads').addEventListener('change', (e) => {
-            renderer.showPads = e.target.checked;
-            renderer.render();
+        if (d.pads) d.pads.forEach(p => {
+            if (p.position) this.expandBounds(p.position.x_mm, p.position.y_mm);
+            if (p.layer) this.layers.add(p.layer);
         });
-        
-        document.getElementById('showVias').addEventListener('change', (e) => {
-            renderer.showVias = e.target.checked;
-            renderer.render();
+        if (d.vias) d.vias.forEach(v => { if (v.position) this.expandBounds(v.position.x_mm, v.position.y_mm); });
+        if (d.arcs) d.arcs.forEach(a => {
+            if (a.center) { const r = a.radius_mm || 0; this.expandBounds(a.center.x_mm - r, a.center.y_mm - r); this.expandBounds(a.center.x_mm + r, a.center.y_mm + r); }
+            if (a.layer) this.layers.add(a.layer);
         });
-        
-        document.getElementById('showArcs').addEventListener('change', (e) => {
-            renderer.showArcs = e.target.checked;
-            renderer.render();
+        if (d.components) d.components.forEach(c => { if (c.position) this.expandBounds(c.position.x_mm, c.position.y_mm); });
+
+        this.fitToView();
+        this.render();
+    }
+
+    getFilterControls() {
+        const ctrls = [
+            { key: 'board_outline', label: '板框 (Outline)', default: true },
+            { key: 'tracks', label: '走线 (Tracks)', default: true },
+            { key: 'pads', label: '焊盘 (Pads)', default: true },
+            { key: 'vias', label: '过孔 (Vias)', default: true },
+            { key: 'arcs', label: '圆弧 (Arcs)', default: true },
+            { key: 'components', label: '位号 (Components)', default: true },
+            { key: 'from_tos', label: '飞线 (From-Tos)', default: true },
+            { key: 'dimensions', label: '标注 (Dimensions)', default: true },
+            { key: 'polygon_pours', label: '铜皮 (Pours)', default: true },
+            { key: 'fills', label: '填充 (Fills)', default: true },
+            { key: 'regions', label: '区域 (Regions)', default: true },
+            { key: 'texts', label: '文本 (Texts)', default: true },
+        ];
+        return ctrls;
+    }
+
+    getLayerList() { return [...this.layers]; }
+
+    shouldShowLayer(layer) {
+        if (this.currentLayer === 'all') return true;
+        return layer === this.currentLayer;
+    }
+
+    render() {
+        const ctx = this.ctx;
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        if (!this.jsonData) return;
+        const d = this.jsonData.data;
+
+        this._drawGrid();
+        if (this.isVisible('board_outline')) this._drawBoardOutline(d.board_outline);
+        if (this.isVisible('polygon_pours') && d.polygon_pours) this._drawPolygonPours(d.polygon_pours);
+        if (this.isVisible('fills') && d.fills) this._drawFills(d.fills);
+        if (this.isVisible('regions') && d.regions) this._drawRegions(d.regions);
+        if (this.isVisible('tracks') && d.tracks) this._drawTracks(d.tracks);
+        if (this.isVisible('arcs') && d.arcs) this._drawArcs(d.arcs);
+        if (this.isVisible('pads') && d.pads) this._drawPads(d.pads);
+        // component pads
+        if (this.isVisible('pads') && d.components) {
+            d.components.forEach(comp => {
+                if (comp.pads) this._drawPads(comp.pads);
+            });
+        }
+        if (this.isVisible('vias') && d.vias) this._drawVias(d.vias);
+        if (this.isVisible('components') && d.components) this._drawComponents(d.components);
+        if (this.isVisible('texts') && d.texts) this._drawTexts(d.texts);
+        if (this.isVisible('from_tos') && d.from_tos) this._drawFromTos(d.from_tos);
+        if (this.isVisible('dimensions') && d.dimensions) this._drawDimensions(d.dimensions);
+    }
+
+    _drawGrid() {
+        const ctx = this.ctx;
+        let gs = 10;
+        if (this.scale < 2) gs = 50; else if (this.scale < 5) gs = 20; else if (this.scale > 30) gs = 5; else if (this.scale > 60) gs = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 0.5;
+        if (!isFinite(this.bounds.maxX)) return;
+        const sx = Math.floor(this.bounds.minX / gs) * gs;
+        const sy = Math.floor(this.bounds.minY / gs) * gs;
+        for (let x = sx; x <= this.bounds.maxX; x += gs) {
+            const p = this.toCanvas(x, 0);
+            ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, this.canvas.height); ctx.stroke();
+        }
+        for (let y = sy; y <= this.bounds.maxY; y += gs) {
+            const p = this.toCanvas(0, y);
+            ctx.beginPath(); ctx.moveTo(0, p.y); ctx.lineTo(this.canvas.width, p.y); ctx.stroke();
+        }
+    }
+
+    _drawBoardOutline(outline) {
+        if (!outline || !outline.vertices || outline.vertices.length < 2) return;
+        const ctx = this.ctx;
+        ctx.strokeStyle = '#FFFF00';
+        ctx.lineWidth = Math.max(2, 2.5 * this.scale / 10);
+        ctx.beginPath();
+        const v0 = this.toCanvas(outline.vertices[0].x_mm, outline.vertices[0].y_mm);
+        ctx.moveTo(v0.x, v0.y);
+        for (let i = 1; i < outline.vertices.length; i++) {
+            const v = this.toCanvas(outline.vertices[i].x_mm, outline.vertices[i].y_mm);
+            ctx.lineTo(v.x, v.y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+    }
+
+    _drawTracks(tracks) {
+        const ctx = this.ctx;
+        ctx.lineCap = 'round';
+        tracks.forEach(t => {
+            if (!this.shouldShowLayer(t.layer)) return;
+            const s = this.toCanvas(t.start.x_mm, t.start.y_mm);
+            const e = this.toCanvas(t.end.x_mm, t.end.y_mm);
+            ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y);
+            ctx.strokeStyle = getPcbLayerColor(t.layer);
+            ctx.lineWidth = Math.max(1, t.width_mm * this.scale);
+            ctx.stroke();
         });
-        
-        document.getElementById('showComponents').addEventListener('change', (e) => {
-            renderer.showComponents = e.target.checked;
-            renderer.render();
+    }
+
+    _drawArcs(arcs) {
+        const ctx = this.ctx;
+        arcs.forEach(a => {
+            if (!this.shouldShowLayer(a.layer)) return;
+            const c = this.toCanvas(a.center.x_mm, a.center.y_mm);
+            const r = a.radius_mm * this.scale;
+            const w = Math.max(1, a.width_mm * this.scale);
+            const sa = -(a.start_angle || 0) * Math.PI / 180;
+            const ea = -(a.end_angle || 360) * Math.PI / 180;
+            ctx.beginPath();
+            if (Math.abs(a.end_angle - a.start_angle) >= 360) ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+            else ctx.arc(c.x, c.y, r, sa, ea, true);
+            ctx.strokeStyle = getPcbLayerColor(a.layer);
+            ctx.lineWidth = w;
+            ctx.stroke();
         });
-        
-        document.getElementById('layerFilter').addEventListener('change', (e) => {
-            renderer.currentLayer = e.target.value;
-            renderer.render();
+    }
+
+    _drawPads(pads) {
+        const ctx = this.ctx;
+        const bgColor = '#0a0a0a';
+        pads.forEach(pad => {
+            if (!this.shouldShowLayer(pad.layer)) return;
+            const pos = this.toCanvas(pad.position.x_mm, pad.position.y_mm);
+            const sx = (pad.top_size?.x_mm || 1) * this.scale;
+            const sy = (pad.top_size?.y_mm || 1) * this.scale;
+            const hole = (pad.hole_size_mm || 0) * this.scale;
+            const color = getPcbLayerColor(pad.layer);
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            ctx.rotate(-(pad.rotation || 0) * Math.PI / 180);
+            if (pad.shape === 'circular' || pad.shape === 'circle') {
+                ctx.beginPath(); ctx.arc(0, 0, Math.max(sx / 2, 1), 0, Math.PI * 2);
+                ctx.fillStyle = color; ctx.fill();
+            } else if (pad.shape === 'oval' || pad.shape === 'elliptical') {
+                ctx.beginPath(); ctx.ellipse(0, 0, sx / 2, sy / 2, 0, 0, Math.PI * 2);
+                ctx.fillStyle = color; ctx.fill();
+            } else if (pad.shape === 'rounded_rect') {
+                const rr = Math.min(sx, sy) * 0.2;
+                ctx.beginPath(); ctx.roundRect(-sx / 2, -sy / 2, sx, sy, rr);
+                ctx.fillStyle = color; ctx.fill();
+            } else {
+                ctx.fillStyle = color;
+                ctx.fillRect(-sx / 2, -sy / 2, sx, sy);
+            }
+            // Slot
+            if (pad.hole_shape === 'slot' && pad.slot_width_mm && pad.slot_height_mm) {
+                const sw = pad.slot_width_mm * this.scale;
+                const sh = pad.slot_height_mm * this.scale;
+                const sr = Math.min(sw, sh) / 2;
+                ctx.beginPath(); ctx.roundRect(-sw / 2, -sh / 2, sw, sh, sr);
+                ctx.fillStyle = bgColor; ctx.fill();
+            } else if (hole > 1) {
+                ctx.beginPath(); ctx.arc(0, 0, hole / 2, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor; ctx.fill();
+            }
+            ctx.restore();
         });
-        
-        document.getElementById('zoomIn').addEventListener('click', () => {
-            renderer.scale = Math.min(renderer.maxScale, renderer.scale * 1.5);
-            document.getElementById('scaleValue').textContent = renderer.scale.toFixed(1);
-            renderer.render();
+    }
+
+    _drawVias(vias) {
+        const ctx = this.ctx;
+        vias.forEach(v => {
+            const pos = this.toCanvas(v.position.x_mm, v.position.y_mm);
+            const or = Math.max((v.diameter_mm / 2) * this.scale, 2);
+            const ir = Math.max((v.hole_mm / 2) * this.scale, 1);
+            ctx.beginPath(); ctx.arc(pos.x, pos.y, or, 0, Math.PI * 2);
+            ctx.fillStyle = '#00FF00'; ctx.fill();
+            ctx.beginPath(); ctx.arc(pos.x, pos.y, ir, 0, Math.PI * 2);
+            ctx.fillStyle = '#0a0a0a'; ctx.fill();
         });
-        
-        document.getElementById('zoomOut').addEventListener('click', () => {
-            renderer.scale = Math.max(renderer.minScale, renderer.scale / 1.5);
-            document.getElementById('scaleValue').textContent = renderer.scale.toFixed(1);
-            renderer.render();
+    }
+
+    _drawComponents(comps) {
+        const ctx = this.ctx;
+        const fs = Math.max(8, Math.min(14, 12 * this.scale / 10));
+        comps.forEach(c => {
+            if (!c.position) return;
+            const pos = this.toCanvas(c.position.x_mm, c.position.y_mm);
+            // silkscreen tracks
+            if (c.silkscreen_tracks) {
+                c.silkscreen_tracks.forEach(t => {
+                    if (!t.start || !t.end) return;
+                    const s = this.toCanvas(t.start.x_mm, t.start.y_mm);
+                    const e = this.toCanvas(t.end.x_mm, t.end.y_mm);
+                    ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y);
+                    ctx.strokeStyle = '#FFFF00'; ctx.lineWidth = Math.max(0.5, (t.width_mm || 0.15) * this.scale); ctx.stroke();
+                });
+            }
+            ctx.save(); ctx.translate(pos.x, pos.y);
+            if (c.rotation) ctx.rotate(-c.rotation * Math.PI / 180);
+            ctx.font = `bold ${fs}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.strokeText(c.designator || '', 0, 0);
+            ctx.fillStyle = c.layer === 'top' ? '#00ff88' : '#ff8800';
+            ctx.fillText(c.designator || '', 0, 0);
+            ctx.restore();
         });
-        
-        document.getElementById('resetView').addEventListener('click', () => {
-            renderer.fitToView();
-            renderer.render();
+    }
+
+    _drawTexts(texts) {
+        const ctx = this.ctx;
+        texts.forEach(t => {
+            const text = t.content ?? t.text;
+            if (!t.position || !text) return;
+            const pos = this.toCanvas(t.position.x_mm, t.position.y_mm);
+            const fs = Math.max(7, (t.height_mm || 1.5) * this.scale);
+            ctx.save(); ctx.translate(pos.x, pos.y);
+            if (t.rotation) ctx.rotate(-t.rotation * Math.PI / 180);
+            ctx.font = `${fs}px Arial`;
+            ctx.fillStyle = getPcbLayerColor(t.layer) || '#ccc';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+            ctx.fillText(text, 0, 0);
+            ctx.restore();
         });
-        
-        document.getElementById('refreshData').addEventListener('click', () => {
-            renderer.loadData('output.json');
+    }
+
+    _drawFromTos(fromTos) {
+        const ctx = this.ctx;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = '#FF8C00';
+        ctx.lineWidth = 1;
+        fromTos.forEach(ft => {
+            if (!ft.start || !ft.end) return;
+            const s = this.toCanvas(ft.start.x_mm, ft.start.y_mm);
+            const e = this.toCanvas(ft.end.x_mm, ft.end.y_mm);
+            ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
         });
-    </script>
+        ctx.setLineDash([]);
+    }
+
+    _drawDimensions(dims) {
+        const ctx = this.ctx;
+        dims.forEach(dm => {
+            if (!dm.start || !dm.end) return;
+            const s = this.toCanvas(dm.start.x_mm, dm.start.y_mm);
+            const e = this.toCanvas(dm.end.x_mm, dm.end.y_mm);
+            ctx.strokeStyle = '#aaa';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+            // arrows
+            const angle = Math.atan2(e.y - s.y, e.x - s.x);
+            const al = 8;
+            for (const [px, py, dir] of [[s.x, s.y, 0], [e.x, e.y, Math.PI]]) {
+                const a = angle + dir;
+                ctx.beginPath(); ctx.moveTo(px, py);
+                ctx.lineTo(px - al * Math.cos(a - 0.4), py - al * Math.sin(a - 0.4));
+                ctx.moveTo(px, py);
+                ctx.lineTo(px - al * Math.cos(a + 0.4), py - al * Math.sin(a + 0.4));
+                ctx.stroke();
+            }
+            if (dm.value_text) {
+                const mx = (s.x + e.x) / 2, my = (s.y + e.y) / 2;
+                ctx.font = '10px Arial'; ctx.fillStyle = '#ccc';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+                ctx.fillText(dm.value_text, mx, my - 4);
+            }
+        });
+    }
+
+    _drawPolygonPours(pours) {
+        const ctx = this.ctx;
+        pours.forEach(pp => {
+            if (!pp.vertices || pp.vertices.length < 3) return;
+            if (!this.shouldShowLayer(pp.layer)) return;
+            const color = getPcbLayerColor(pp.layer);
+            ctx.beginPath();
+            const v0 = this.toCanvas(pp.vertices[0].position?.x_mm ?? pp.vertices[0].x_mm, pp.vertices[0].position?.y_mm ?? pp.vertices[0].y_mm);
+            ctx.moveTo(v0.x, v0.y);
+            for (let i = 1; i < pp.vertices.length; i++) {
+                const vi = pp.vertices[i];
+                const vp = vi.position || vi;
+                const p = this.toCanvas(vp.x_mm, vp.y_mm);
+                if (vi.kind === 1 && vi.cx_mm != null) {
+                    const cp = this.toCanvas(vi.cx_mm, vi.cy_mm);
+                    ctx.arcTo(cp.x, cp.y, p.x, p.y, 20);
+                }
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = Math.max(1, 1 * this.scale / 10);
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.stroke();
+        });
+    }
+
+    _drawFills(fills) {
+        const ctx = this.ctx;
+        fills.forEach(f => {
+            if (!f.corner1 || !f.corner2) return;
+            if (f.layer && !this.shouldShowLayer(f.layer)) return;
+            const c1 = this.toCanvas(f.corner1.x_mm, f.corner1.y_mm);
+            const c2 = this.toCanvas(f.corner2.x_mm, f.corner2.y_mm);
+            const color = getPcbLayerColor(f.layer);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.4;
+            ctx.fillRect(Math.min(c1.x, c2.x), Math.min(c1.y, c2.y), Math.abs(c2.x - c1.x), Math.abs(c2.y - c1.y));
+            ctx.globalAlpha = 1;
+        });
+    }
+
+    _drawRegions(regions) {
+        const ctx = this.ctx;
+        regions.forEach(rg => {
+            if (!rg.vertices || rg.vertices.length < 3) return;
+            if (rg.layer && !this.shouldShowLayer(rg.layer)) return;
+            const color = getPcbLayerColor(rg.layer);
+            ctx.beginPath();
+            const v0 = rg.vertices[0];
+            const vp0 = v0.position || v0;
+            const p0 = this.toCanvas(vp0.x_mm, vp0.y_mm);
+            ctx.moveTo(p0.x, p0.y);
+            for (let i = 1; i < rg.vertices.length; i++) {
+                const vp = rg.vertices[i].position || rg.vertices[i];
+                const p = this.toCanvas(vp.x_mm, vp.y_mm);
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.3;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+    }
+}
+
+// ===================== APP CONTROLLER =====================
+let activeRenderer = null;
+const canvas = document.getElementById('main-canvas');
+const schRenderer = new SchematicRenderer(canvas);
+const pcbRenderer = new PCBRenderer(canvas);
+
+function updateStatus() {
+    const r = activeRenderer;
+    if (!r || !r.jsonData) return;
+    document.getElementById('stFile').textContent = r.jsonData.source_file || '-';
+    document.getElementById('stType').textContent = r.jsonData.file_type || '-';
+    document.getElementById('stZoom').textContent = `缩放: ${r.scale.toFixed(1)} px/mm`;
+    const stats = r.jsonData.data?.statistics;
+    if (stats) {
+        const parts = [];
+        for (const [k, v] of Object.entries(stats)) { parts.push(`${k}: ${v}`); }
+        document.getElementById('stStats').textContent = parts.join(' | ');
+    }
+}
+
+function buildSidebar(renderer) {
+    const container = document.getElementById('layerControls');
+    container.innerHTML = '';
+    const ctrls = renderer.getFilterControls();
+    if (ctrls.length > 0) {
+        const sec = document.createElement('div'); sec.className = 'section';
+        const title = document.createElement('div'); title.className = 'section-title'; title.textContent = '元素显示';
+        sec.appendChild(title);
+        ctrls.forEach(c => {
+            renderer.visibility[c.key] = c.default;
+            const label = document.createElement('label');
+            const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = c.default;
+            cb.addEventListener('change', () => { renderer.visibility[c.key] = cb.checked; renderer.render(); });
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(c.label));
+            sec.appendChild(label);
+        });
+        container.appendChild(sec);
+    }
+    // PCB layer filter
+    if (renderer instanceof PCBRenderer) {
+        const layers = renderer.getLayerList();
+        if (layers.length > 0) {
+            const sec = document.createElement('div'); sec.className = 'section';
+            const title = document.createElement('div'); title.className = 'section-title'; title.textContent = '图层过滤';
+            sec.appendChild(title);
+            const sel = document.createElement('select');
+            const optAll = document.createElement('option'); optAll.value = 'all'; optAll.textContent = '所有层'; sel.appendChild(optAll);
+            layers.forEach(l => { const o = document.createElement('option'); o.value = l; o.textContent = l; sel.appendChild(o); });
+            sel.addEventListener('change', () => { renderer.currentLayer = sel.value; renderer.render(); });
+            sec.appendChild(sel);
+            // Color legend
+            const legTitle = document.createElement('div'); legTitle.className = 'section-title'; legTitle.textContent = '颜色图例'; legTitle.style.marginTop = '8px';
+            sec.appendChild(legTitle);
+            layers.forEach(l => {
+                const row = document.createElement('div'); row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '6px'; row.style.padding = '1px 0';
+                const dot = document.createElement('span'); dot.className = 'color-dot'; dot.style.background = getPcbLayerColor(l);
+                row.appendChild(dot);
+                row.appendChild(document.createTextNode(l));
+                sec.appendChild(row);
+            });
+            container.appendChild(sec);
+        }
+    }
+}
+
+function loadJsonData(json) {
+    document.getElementById('welcomeScreen').style.display = 'none';
+    const badge = document.getElementById('fileTypeBadge');
+    if (json.file_type === 'SchDoc') {
+        activeRenderer = schRenderer;
+        badge.textContent = 'SchDoc';
+        badge.className = 'file-type-badge badge-sch';
+    } else {
+        activeRenderer = pcbRenderer;
+        badge.textContent = 'PcbDoc';
+        badge.className = 'file-type-badge badge-pcb';
+    }
+    badge.style.display = '';
+    activeRenderer.resize();
+    buildSidebar(activeRenderer);
+    activeRenderer.load(json);
+    updateStatus();
+}
+
+function loadFromUrl(url) {
+    fetch(url + '?t=' + Date.now())
+        .then(r => { if (!r.ok) throw new Error('Fetch failed'); return r.json(); })
+        .then(json => loadJsonData(json))
+        .catch(err => {
+            alert('无法通过 fetch 加载文件（file:// 协议受限）。\n请使用拖放或"打开文件"按钮加载 JSON 文件。\n\n错误: ' + err.message);
+        });
+}
+
+function loadFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const json = JSON.parse(e.target.result);
+            loadJsonData(json);
+        } catch (err) { alert('JSON 解析失败: ' + err.message); }
+    };
+    reader.readAsText(file);
+}
+
+// Toolbar buttons
+document.getElementById('btnLoadSch').addEventListener('click', () => loadFromUrl('../testjson/sch_v2.json'));
+document.getElementById('btnLoadPcb').addEventListener('click', () => loadFromUrl('../testjson/pcb_v2.json'));
+document.getElementById('btnOpenFile').addEventListener('click', () => document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', e => { if (e.target.files[0]) loadFromFile(e.target.files[0]); });
+document.getElementById('btnFit').addEventListener('click', () => { if (activeRenderer) { activeRenderer.fitToView(); activeRenderer.render(); updateStatus(); } });
+document.getElementById('btnZoomIn').addEventListener('click', () => { if (activeRenderer) { activeRenderer.scale = Math.min(activeRenderer.maxScale, activeRenderer.scale * 1.5); activeRenderer.render(); updateStatus(); } });
+document.getElementById('btnZoomOut').addEventListener('click', () => { if (activeRenderer) { activeRenderer.scale = Math.max(activeRenderer.minScale, activeRenderer.scale / 1.5); activeRenderer.render(); updateStatus(); } });
+
+// Drag and drop
+const dropOverlay = document.getElementById('drop-overlay');
+let dragCounter = 0;
+document.addEventListener('dragenter', e => { e.preventDefault(); dragCounter++; dropOverlay.style.display = 'flex'; });
+document.addEventListener('dragleave', e => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; dropOverlay.style.display = 'none'; } });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+    e.preventDefault(); dragCounter = 0; dropOverlay.style.display = 'none';
+    if (e.dataTransfer.files[0]) loadFromFile(e.dataTransfer.files[0]);
+});
+
+// Resize
+window.addEventListener('resize', () => {
+    if (activeRenderer) { activeRenderer.resize(); activeRenderer.render(); }
+});
+
+// Initial sizing
+schRenderer.resize();
+pcbRenderer.resize();
+</script>
 </body>
 </html>

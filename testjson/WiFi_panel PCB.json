@@ -1,0 +1,243 @@
+{
+  "schema_version": "1.1",
+  "generator": "altium-parser",
+  "file_type": "PcbDoc",
+  "source_file": "WiFi_panel.PcbDoc",
+  "data": {
+    "board_outline": {
+      "vertices": [
+        {
+          "x_mm": 28.4,
+          "y_mm": 28.4
+        },
+        {
+          "x_mm": 145.6,
+          "y_mm": 28.4
+        },
+        {
+          "x_mm": 145.6,
+          "y_mm": 138.0
+        },
+        {
+          "x_mm": 28.4,
+          "y_mm": 138.0
+        }
+      ],
+      "bounding_box": {
+        "x1_mm": 0.0,
+        "y1_mm": 0.0,
+        "x2_mm": 0.0,
+        "y2_mm": 0.0
+      }
+    },
+    "layer_stackup": [
+      {
+        "id": 1,
+        "name": "Top Layer",
+        "copper_thickness_mm": 0.035,
+        "dielectric_constant": 4.2,
+        "dielectric_height_mm": 0.2,
+        "material": "FR-4"
+      },
+      {
+        "id": 32,
+        "name": "Bottom Layer",
+        "copper_thickness_mm": 0.035,
+        "dielectric_constant": 4.2,
+        "dielectric_height_mm": 0.2,
+        "material": "FR-4"
+      }
+    ],
+    "nets": [
+      {
+        "id": 0,
+        "name": "No Net"
+      }
+    ],
+    "components": [],
+    "tracks": [
+      {
+        "start": {
+          "x_mm": 25.4,
+          "y_mm": 143.51
+        },
+        "end": {
+          "x_mm": 148.399993,
+          "y_mm": 143.51
+        },
+        "width_mm": 0.254,
+        "layer": "Mechanical 1",
+        "net": ""
+      },
+      {
+        "start": {
+          "x_mm": 25.4,
+          "y_mm": 25.4
+        },
+        "end": {
+          "x_mm": 25.4,
+          "y_mm": 143.51
+        },
+        "width_mm": 0.254,
+        "layer": "Mechanical 1",
+        "net": ""
+      },
+      {
+        "start": {
+          "x_mm": 148.399993,
+          "y_mm": 143.51
+        },
+        "end": {
+          "x_mm": 148.4,
+          "y_mm": 25.4
+        },
+        "width_mm": 0.254,
+        "layer": "Mechanical 1",
+        "net": ""
+      },
+      {
+        "start": {
+          "x_mm": 25.4,
+          "y_mm": 25.4
+        },
+        "end": {
+          "x_mm": 148.4,
+          "y_mm": 25.4
+        },
+        "width_mm": 0.254,
+        "layer": "Mechanical 1",
+        "net": ""
+      }
+    ],
+    "arcs": [],
+    "pads": [
+      {
+        "designator": "4",
+        "position": {
+          "x_mm": 30.4,
+          "y_mm": 30.4
+        },
+        "top_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_size_mm": 1.000001,
+        "shape": "round",
+        "rotation": 0.0,
+        "layer": "Multi-Layer",
+        "net": "",
+        "pad_type": "through_hole",
+        "mid_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "bottom_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_shape": "round",
+        "is_plated": true
+      },
+      {
+        "designator": "4",
+        "position": {
+          "x_mm": 143.4,
+          "y_mm": 30.4
+        },
+        "top_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_size_mm": 1.000001,
+        "shape": "round",
+        "rotation": 0.0,
+        "layer": "Multi-Layer",
+        "net": "",
+        "pad_type": "through_hole",
+        "mid_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "bottom_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_shape": "round",
+        "is_plated": true
+      },
+      {
+        "designator": "4",
+        "position": {
+          "x_mm": 143.6,
+          "y_mm": 136.0
+        },
+        "top_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_size_mm": 1.000001,
+        "shape": "round",
+        "rotation": 0.0,
+        "layer": "Multi-Layer",
+        "net": "",
+        "pad_type": "through_hole",
+        "mid_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "bottom_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_shape": "round",
+        "is_plated": true
+      },
+      {
+        "designator": "4",
+        "position": {
+          "x_mm": 30.4,
+          "y_mm": 135.977
+        },
+        "top_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_size_mm": 1.000001,
+        "shape": "round",
+        "rotation": 0.0,
+        "layer": "Multi-Layer",
+        "net": "",
+        "pad_type": "through_hole",
+        "mid_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "bottom_size": {
+          "x_mm": 1.000001,
+          "y_mm": 1.000001
+        },
+        "hole_shape": "round",
+        "is_plated": true
+      }
+    ],
+    "vias": [],
+    "fills": [],
+    "regions": [],
+    "texts": [],
+    "polygon_pours": [],
+    "design_rules": [],
+    "model_3d_refs": [],
+    "from_tos": [],
+    "dimensions": [],
+    "statistics": {
+      "component_count": 0,
+      "track_count": 4,
+      "pad_count": 4,
+      "via_count": 0,
+      "net_count": 1,
+      "layer_count": 2,
+      "from_to_count": 0,
+      "dimension_count": 0
+    }
+  }
+}

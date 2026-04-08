@@ -27,7 +27,7 @@ def serialize_to_json(
         The JSON string.
     """
     envelope = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "generator": "altium-parser",
         "file_type": file_type,
         "source_file": source_file,

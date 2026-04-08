@@ -2,6 +2,7 @@ LICENSE
 README.md
 pyproject.toml
 altium_parser/__init__.py
+altium_parser/__main__.py
 altium_parser/cli.py
 altium_parser/registry.py
 altium_parser.egg-info/PKG-INFO

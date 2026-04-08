@@ -167,6 +167,9 @@ class PcbPad:
     component_id: int = -1
     is_plated: bool = True
     pad_type: str = "smd"
+    slot_width_mm: float = 0.0
+    slot_height_mm: float = 0.0
+    slot_rotation: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -185,6 +188,10 @@ class PcbPad:
             d["bottom_size"] = self.bottom_size.to_dict()
             d["hole_shape"] = self.hole_shape
             d["is_plated"] = self.is_plated
+            if self.hole_shape == "slot":
+                d["slot_width_mm"] = _round_coord(self.slot_width_mm)
+                d["slot_height_mm"] = _round_coord(self.slot_height_mm)
+                d["slot_rotation"] = _round_coord(self.slot_rotation, 2)
         return d
 
 
@@ -240,7 +247,7 @@ class PcbFill:
 @dataclass
 class PcbRegion:
     """A polygon region (copper pour, board cutout, etc.)."""
-    vertices: list[Point2D] = field(default_factory=list)
+    vertices: list[PolygonVertex] = field(default_factory=list)
     layer: str = ""
     layer_id: int = 0
     net: str = ""
@@ -305,13 +312,93 @@ class PcbDesignRule:
 
 
 @dataclass
+class PolygonVertex:
+    """多边形顶点，支持直线和圆弧"""
+    position: Point2D = field(default_factory=Point2D)
+    kind: int = 0  # 0=line segment, 1=arc
+    # 以下字段仅在 kind=1 时有意义
+    cx_mm: float = 0.0  # 弧心 X
+    cy_mm: float = 0.0  # 弧心 Y
+    start_angle: float = 0.0
+    end_angle: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "position": self.position.to_dict(),
+            "kind": self.kind,
+            "x_mm": round(self.position.x_mm, 6),   # 向后兼容
+            "y_mm": round(self.position.y_mm, 6),   # 向后兼容
+        }
+        if self.kind == 1:
+            d["cx_mm"] = round(self.cx_mm, 6)
+            d["cy_mm"] = round(self.cy_mm, 6)
+            d["start_angle"] = self.start_angle
+            d["end_angle"] = self.end_angle
+        return d
+
+
+@dataclass
+class PcbFromTo:
+    """飞线（ratsnest）连接"""
+    start: Point2D = field(default_factory=Point2D)
+    end: Point2D = field(default_factory=Point2D)
+    net: str = ""
+    net_id: int = -1
+    from_component: str = ""
+    from_pad: str = ""
+    to_component: str = ""
+    to_pad: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "start": self.start.to_dict(),
+            "end": self.end.to_dict(),
+            "net": self.net,
+            "net_id": self.net_id,
+            "from_component": self.from_component,
+            "from_pad": self.from_pad,
+            "to_component": self.to_component,
+            "to_pad": self.to_pad,
+        }
+
+
+@dataclass
+class PcbDimension:
+    """PCB尺寸标注"""
+    kind: str = ""  # linear, radial, diameter, datum, center, angular, baseline, leader
+    start: Point2D = field(default_factory=Point2D)
+    end: Point2D = field(default_factory=Point2D)
+    text_position: Point2D = field(default_factory=Point2D)
+    value_text: str = ""
+    height_mm: float = 0.0
+    layer: str = ""
+    layer_id: int = 0
+    line_width_mm: float = 0.0
+    text_height_mm: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "start": self.start.to_dict(),
+            "end": self.end.to_dict(),
+            "text_position": self.text_position.to_dict(),
+            "value_text": self.value_text,
+            "height_mm": self.height_mm,
+            "layer": self.layer,
+            "layer_id": self.layer_id,
+            "line_width_mm": round(self.line_width_mm, 6),
+            "text_height_mm": round(self.text_height_mm, 6),
+        }
+
+
+@dataclass
 class PcbPolygonPour:
     """A polygon pour definition."""
     net: str = ""
     net_id: int = 0
     layer: str = ""
     layer_id: int = 0
-    vertices: list[Point2D] = field(default_factory=list)
+    vertices: list[PolygonVertex] = field(default_factory=list)
     pour_mode: str = "solid"
     clearance_mm: float = 0.254
     min_track_width_mm: float = 0.254
@@ -374,6 +461,8 @@ class PcbDocument:
     polygon_pours: list[PcbPolygonPour] = field(default_factory=list)
     design_rules: list[PcbDesignRule] = field(default_factory=list)
     model_3d_refs: list[PcbModel3DRef] = field(default_factory=list)
+    from_tos: list[PcbFromTo] = field(default_factory=list)
+    dimensions: list[PcbDimension] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -391,6 +480,8 @@ class PcbDocument:
             "polygon_pours": [p.to_dict() for p in self.polygon_pours],
             "design_rules": [r.to_dict() for r in self.design_rules],
             "model_3d_refs": [m.to_dict() for m in self.model_3d_refs],
+            "from_tos": [ft.to_dict() for ft in self.from_tos],
+            "dimensions": [d.to_dict() for d in self.dimensions],
             "statistics": {
                 "component_count": len(self.components),
                 "track_count": len(self.tracks),
@@ -398,5 +489,7 @@ class PcbDocument:
                 "via_count": len(self.vias),
                 "net_count": len(self.nets),
                 "layer_count": len(self.layer_stackup),
+                "from_to_count": len(self.from_tos),
+                "dimension_count": len(self.dimensions),
             },
         }

@@ -25,6 +25,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+altium-parser.egg-info/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -220,4 +221,7 @@ cache/
 
 # Diagnostic and debug outputs
 diagnose_*.py
+
+# Test ECAD files (large binary files)
+testecad/
 test_output/

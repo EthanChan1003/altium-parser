@@ -130,6 +130,33 @@ class SchArc:
 
 
 @dataclass
+class SchEllipticalArc:
+    """Schematic elliptical arc primitive."""
+    center: Point2D = field(default_factory=Point2D)
+    radius_x_mm: float = 0.0
+    radius_y_mm: float = 0.0
+    start_angle: float = 0.0
+    end_angle: float = 360.0
+    rotation_angle: float = 0.0
+    line_width: int = 1
+    color: Color = field(default_factory=Color)
+    owner_index: int = -1
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": "elliptical_arc",
+            "center": self.center.to_dict(),
+            "radius_x_mm": self.radius_x_mm,
+            "radius_y_mm": self.radius_y_mm,
+            "start_angle": self.start_angle,
+            "end_angle": self.end_angle,
+            "rotation_angle": self.rotation_angle,
+            "line_width": self.line_width,
+            "color": self.color.to_hex(),
+        }
+
+
+@dataclass
 class SchEllipse:
     """Schematic ellipse primitive."""
     center: Point2D = field(default_factory=Point2D)
@@ -421,6 +448,53 @@ class SchParameter:
 
 
 @dataclass
+class SchFont:
+    """Schematic font definition from sheet properties."""
+    id: int = 0
+    name: str = ""
+    size: int = 10
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "size": self.size,
+        }
+
+
+@dataclass
+class SchImplementationList:
+    """RECORD=44 - Implementation list container."""
+    owner_index: int = -1
+
+
+@dataclass
+class SchImplementation:
+    """RECORD=45 - Implementation entry (component-to-footprint mapping)."""
+    owner_index: int = -1
+    description: str = ""
+    model_name: str = ""
+    model_type: str = ""
+    is_current: bool = False
+    datafile_count: int = 0
+    model_datafile_entity: str = ""
+    model_datafile_kind: str = ""
+    is_footprint: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "description": self.description,
+            "model_name": self.model_name,
+            "model_type": self.model_type,
+            "is_current": self.is_current,
+            "is_footprint": self.is_footprint,
+            "datafile_count": self.datafile_count,
+            "model_datafile_entity": self.model_datafile_entity,
+            "model_datafile_kind": self.model_datafile_kind,
+        }
+
+
+@dataclass
 class SchComponent:
     """Schematic component instance."""
     owner_index: int = 0
@@ -438,6 +512,7 @@ class SchComponent:
     pins: list[SchPin] = field(default_factory=list)
     parameters: list[SchParameter] = field(default_factory=list)
     graphic_primitives: list[Any] = field(default_factory=list)
+    implementations: list[SchImplementation] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -454,6 +529,7 @@ class SchComponent:
             "pins": [p.to_dict() for p in self.pins],
             "parameters": [p.to_dict() for p in self.parameters],
             "graphic_primitives": [model_to_dict(p) for p in self.graphic_primitives],
+            "implementations": [impl.to_dict() for impl in self.implementations],
         }
 
 
@@ -489,6 +565,7 @@ class SchSheet:
     grid_size_mm: float = 2.54
     title_block: SchTitleBlock = field(default_factory=SchTitleBlock)
     font_count: int = 0
+    fonts: list[SchFont] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -497,6 +574,7 @@ class SchSheet:
             "height_mm": self.height_mm,
             "grid_size_mm": self.grid_size_mm,
             "title_block": self.title_block.to_dict(),
+            "fonts": [f.to_dict() for f in self.fonts],
         }
 
 
@@ -520,6 +598,7 @@ class SchDocument:
     lines: list[SchLine] = field(default_factory=list)
     arcs: list[SchArc] = field(default_factory=list)
     ellipses: list[SchEllipse] = field(default_factory=list)
+    elliptical_arcs: list[SchEllipticalArc] = field(default_factory=list)
     round_rectangles: list[SchRoundRectangle] = field(default_factory=list)
     beziers: list[SchBezier] = field(default_factory=list)
     texts: list[SchText] = field(default_factory=list)
@@ -547,6 +626,7 @@ class SchDocument:
             "lines": [l.to_dict() for l in self.lines],
             "arcs": [a.to_dict() for a in self.arcs],
             "ellipses": [e.to_dict() for e in self.ellipses],
+            "elliptical_arcs": [ea.to_dict() for ea in self.elliptical_arcs],
             "round_rectangles": [r.to_dict() for r in self.round_rectangles],
             "beziers": [b.to_dict() for b in self.beziers],
             "texts": [t.to_dict() for t in self.texts],

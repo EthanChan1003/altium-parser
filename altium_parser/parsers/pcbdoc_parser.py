@@ -17,7 +17,8 @@ from ..models.common import Point2D, BoundingBox
 from ..models.pcb import (
     PcbDocument, BoardOutline, StackupLayer, PcbNet, PcbComponent,
     PcbTrack, PcbArc, PcbPad, PcbVia, PcbFill, PcbRegion,
-    PcbText, PcbDesignRule, PcbPolygonPour,
+    PcbText, PcbDesignRule, PcbPolygonPour, PolygonVertex,
+    PcbFromTo, PcbDimension,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,8 @@ class PcbDocParser:
             doc.regions = self._parse_regions(ole, net_map)
             doc.design_rules = self._parse_rules(ole)
             doc.polygon_pours = self._parse_polygons(ole, net_map)
+            doc.from_tos = self._parse_fromtos(ole, net_map)
+            doc.dimensions = self._parse_dimensions(ole)
 
             # === Post-processing ===
             
@@ -917,6 +920,59 @@ class PcbDocParser:
 
             pad.pad_type = "through_hole" if pad.hole_size_mm > 0 else "smd"
 
+            # Hole shape: try to determine from binary data
+            # Hole shape byte is typically near offset 84-90 range
+            hole_shape_id = 0
+            if pad_data_pos + 90 <= len(data):
+                # Try common offsets for hole shape in binary format
+                for offset in (84, 85, 86):
+                    candidate = data[pad_data_pos + offset]
+                    if candidate in (0, 1, 2):
+                        hole_shape_id = candidate
+                        break
+            hole_shape_names = {0: "round", 1: "square", 2: "slot"}
+            pad.hole_shape = hole_shape_names.get(hole_shape_id, "round")
+
+            # Slot dimensions: attempt extraction from binary data
+            if hole_shape_id == 2 and pad.hole_size_mm > 0:
+                # Slot width/height may be stored after hole shape data
+                # Try reading from offsets 87-98 range
+                try:
+                    if pad_data_pos + 98 <= len(data):
+                        slot_w = self._bmil_to_mm(data[pad_data_pos + 87:pad_data_pos + 91])
+                        slot_h = self._bmil_to_mm(data[pad_data_pos + 91:pad_data_pos + 95])
+                        slot_rot_bytes = data[pad_data_pos + 95:pad_data_pos + 103]
+                        if len(slot_rot_bytes) == 8:
+                            slot_rot = struct.unpack("<d", slot_rot_bytes)[0]
+                        else:
+                            slot_rot = 0.0
+                        if slot_w > 0 and slot_h > 0:
+                            pad.slot_width_mm = slot_w
+                            pad.slot_height_mm = slot_h
+                            pad.slot_rotation = slot_rot
+                        else:
+                            # Fallback: use hole_size as both dimensions
+                            pad.slot_width_mm = pad.hole_size_mm
+                            pad.slot_height_mm = pad.hole_size_mm
+                            logger.debug(
+                                "Slot pad '%s': binary slot dims zero, using hole_size as fallback",
+                                pad.designator,
+                            )
+                    else:
+                        pad.slot_width_mm = pad.hole_size_mm
+                        pad.slot_height_mm = pad.hole_size_mm
+                        logger.debug(
+                            "Slot pad '%s': insufficient binary data for slot dims",
+                            pad.designator,
+                        )
+                except Exception:
+                    pad.slot_width_mm = pad.hole_size_mm
+                    pad.slot_height_mm = pad.hole_size_mm
+                    logger.debug(
+                        "Slot pad '%s': failed to read binary slot dims",
+                        pad.designator,
+                    )
+
             pads.append(pad)
 
             # Move to next record
@@ -964,6 +1020,17 @@ class PcbDocParser:
                 hole_shape_id = self._get_int(kv, "HOLESHAPE", 0)
                 hole_shape_names = {0: "round", 1: "square", 2: "slot"}
                 pad.hole_shape = hole_shape_names.get(hole_shape_id, "round")
+
+                # Slot dimensions from KV fields
+                if hole_shape_id == 2 and pad.hole_size_mm > 0:
+                    pad.slot_width_mm = pcb_to_mm(self._get_int(kv, "HOLEWIDTH", 0))
+                    pad.slot_height_mm = pcb_to_mm(self._get_int(kv, "HOLEHEIGHT",
+                                                     self._get_int(kv, "HOLESIZE", 0)))
+                    pad.slot_rotation = self._get_float(kv, "HOLEROTATION", 0.0)
+                    if pad.slot_width_mm == 0:
+                        pad.slot_width_mm = pad.hole_size_mm
+                    if pad.slot_height_mm == 0:
+                        pad.slot_height_mm = pad.hole_size_mm
 
                 pads.append(pad)
 
@@ -1112,12 +1179,22 @@ class PcbDocParser:
                 region.is_keepout = kv.get("KEEPOUT", "FALSE").upper() == "TRUE"
                 region.kind = self._get_int(kv, "KIND", 0)
 
-                # Parse vertices
+                # Parse vertices with VKIND support
                 vertex_count = self._get_int(kv, "VERTICECOUNT", 0)
                 for i in range(vertex_count):
                     x = pcb_to_mm(self._get_int(kv, f"VX{i}", 0))
                     y = pcb_to_mm(self._get_int(kv, f"VY{i}", 0))
-                    region.vertices.append(Point2D(x_mm=x, y_mm=y))
+                    vkind = self._get_int(kv, f"VKIND{i}", 0)
+                    vertex = PolygonVertex(
+                        position=Point2D(x_mm=x, y_mm=y),
+                        kind=vkind,
+                    )
+                    if vkind == 1:
+                        vertex.cx_mm = pcb_to_mm(self._get_int(kv, f"CX{i}", 0))
+                        vertex.cy_mm = pcb_to_mm(self._get_int(kv, f"CY{i}", 0))
+                        vertex.start_angle = self._get_float(kv, f"SA{i}", 0.0)
+                        vertex.end_angle = self._get_float(kv, f"EA{i}", 0.0)
+                    region.vertices.append(vertex)
 
                 regions.append(region)
 
@@ -1175,16 +1252,109 @@ class PcbDocParser:
             pour_mode = self._get_int(kv, "POURMODE", 0)
             poly.pour_mode = {0: "none", 1: "solid", 2: "hatched"}.get(pour_mode, "solid")
 
-            # Parse vertices
+            # Parse vertices with VKIND support
             vertex_count = self._get_int(kv, "VERTICECOUNT", 0)
             for i in range(vertex_count):
                 x = pcb_to_mm(self._get_int(kv, f"VX{i}", 0))
                 y = pcb_to_mm(self._get_int(kv, f"VY{i}", 0))
-                poly.vertices.append(Point2D(x_mm=x, y_mm=y))
+                vkind = self._get_int(kv, f"VKIND{i}", 0)
+                vertex = PolygonVertex(
+                    position=Point2D(x_mm=x, y_mm=y),
+                    kind=vkind,
+                )
+                if vkind == 1:
+                    vertex.cx_mm = pcb_to_mm(self._get_int(kv, f"CX{i}", 0))
+                    vertex.cy_mm = pcb_to_mm(self._get_int(kv, f"CY{i}", 0))
+                    vertex.start_angle = self._get_float(kv, f"SA{i}", 0.0)
+                    vertex.end_angle = self._get_float(kv, f"EA{i}", 0.0)
+                poly.vertices.append(vertex)
 
             polygons.append(poly)
 
         return polygons
+
+    # -- FromTo (ratsnest) parsing --
+
+    def _parse_fromtos(self, ole: OleReader, net_map: dict[int, PcbNet]) -> list[PcbFromTo]:
+        """Parse FromTos6 storage (ratsnest / fly-wire connections)."""
+        records = self._read_pcb_records(ole, "FromTos6")
+        fromtos: list[PcbFromTo] = []
+
+        for kv in records:
+            ft = PcbFromTo()
+            ft.start = Point2D(
+                x_mm=self._parse_coordinate(kv.get("X1", "0")),
+                y_mm=self._parse_coordinate(kv.get("Y1", "0")),
+            )
+            ft.end = Point2D(
+                x_mm=self._parse_coordinate(kv.get("X2", "0")),
+                y_mm=self._parse_coordinate(kv.get("Y2", "0")),
+            )
+            ft.net_id = self._get_int(kv, "NET", -1)
+            ft.net = net_map.get(ft.net_id, PcbNet()).name
+            ft.from_component = kv.get("FROMCOMPONENT", "")
+            ft.from_pad = kv.get("FROMPAD", "")
+            ft.to_component = kv.get("TOCOMPONENT", "")
+            ft.to_pad = kv.get("TOPAD", "")
+            fromtos.append(ft)
+
+        logger.debug("Parsed %d from-to records", len(fromtos))
+        return fromtos
+
+    # -- Dimension parsing --
+
+    DIMENSION_KIND_NAMES: dict[int, str] = {
+        1: "linear",
+        2: "angular",
+        3: "radial",
+        4: "leader",
+        5: "datum",
+        6: "baseline",
+        7: "center",
+        8: "linear_diameter",
+        9: "radial_diameter",
+    }
+
+    def _parse_dimensions(self, ole: OleReader) -> list[PcbDimension]:
+        """Parse Dimensions6 storage (dimension annotations)."""
+        records = self._read_pcb_records(ole, "Dimensions6")
+        dimensions: list[PcbDimension] = []
+
+        for kv in records:
+            dim = PcbDimension()
+            kind_id = self._get_int(kv, "DIMENSIONKIND", 0)
+            dim.kind = self.DIMENSION_KIND_NAMES.get(kind_id, f"unknown_{kind_id}")
+            dim.start = Point2D(
+                x_mm=self._parse_coordinate(kv.get("X1", "0")),
+                y_mm=self._parse_coordinate(kv.get("Y1", "0")),
+            )
+            dim.end = Point2D(
+                x_mm=self._parse_coordinate(kv.get("X2", "0")),
+                y_mm=self._parse_coordinate(kv.get("Y2", "0")),
+            )
+            dim.text_position = Point2D(
+                x_mm=self._parse_coordinate(kv.get("TEXTX", "0")),
+                y_mm=self._parse_coordinate(kv.get("TEXTY", "0")),
+            )
+
+            # Value text: prefer TEXT, fallback to PREFIX + VALUE + SUFFIX
+            text = kv.get("TEXT", "")
+            if not text:
+                prefix = kv.get("TEXTPREFIX", "")
+                value = kv.get("VALUE", "")
+                suffix = kv.get("TEXTSUFFIX", "")
+                text = f"{prefix}{value}{suffix}"
+            dim.value_text = text
+
+            dim.height_mm = pcb_to_mm(self._get_int(kv, "HEIGHT", 0))
+            dim.text_height_mm = pcb_to_mm(self._get_int(kv, "TEXTHEIGHT", 0))
+            dim.line_width_mm = pcb_to_mm(self._get_int(kv, "LINEWIDTH", 0))
+            dim.layer_id = self._get_int(kv, "LAYER", 33)
+            dim.layer = layer_id_to_name(dim.layer_id)
+            dimensions.append(dim)
+
+        logger.debug("Parsed %d dimension records", len(dimensions))
+        return dimensions
 
     # -- Helpers --
 

@@ -21,9 +21,9 @@ from ..models.schematic import (
     SchDocument, SchSheet, SchTitleBlock, SchComponent, SchPin,
     SchWire, SchBus, SchBusEntry, SchNetLabel, SchPowerPort, SchPort,
     SchJunction, SchNoErc, SchPolyline, SchPolygon, SchRectangle,
-    SchLine, SchArc, SchEllipse, SchRoundRectangle, SchBezier,
+    SchLine, SchArc, SchEllipse, SchEllipticalArc, SchRoundRectangle, SchBezier,
     SchText, SchLabel, SchImage, SchSheetSymbol, SchSheetEntry,
-    SchParameter,
+    SchParameter, SchFont, SchImplementationList, SchImplementation,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,9 @@ class SchDocParser:
         # (children's OWNERINDEX references these keys)
         components_by_altium_index: dict[int, SchComponent] = {}
         sheet_symbols_by_altium_index: dict[int, SchSheetSymbol] = {}
+        # ImplementationList → Component mapping (for indirect Implementation → Component linkage)
+        # Key: altium_index of impl list (record_pos - 1), Value: owner_index pointing to component
+        impl_list_to_comp: dict[int, int] = {}
 
         for idx, kv in enumerate(records):
             record_type_str = kv.get("RECORD", "")
@@ -89,6 +92,10 @@ class SchDocParser:
                     components_by_altium_index[obj.altium_index] = obj
                 elif isinstance(obj, SchSheetSymbol):
                     sheet_symbols_by_altium_index[obj.altium_index] = obj
+                elif isinstance(obj, SchImplementationList):
+                    record_pos = kv.get("_record_pos", idx)
+                    altium_idx = record_pos - 1 if isinstance(record_pos, int) else idx
+                    impl_list_to_comp[altium_idx] = obj.owner_index
             else:
                 doc.unknown_record_count += 1
 
@@ -100,7 +107,7 @@ class SchDocParser:
         
         for idx, obj in objects_by_index.items():
             # Skip containers (they don't have OWNERINDEX pointing to another parent)
-            if isinstance(obj, (SchComponent, SchSheetSymbol, SchSheet)):
+            if isinstance(obj, (SchComponent, SchSheetSymbol, SchSheet, SchImplementationList)):
                 continue
             
             # Get the OWNERINDEX - this references the parent's Altium INDEX field
@@ -126,11 +133,19 @@ class SchDocParser:
                     sheet_symbols_by_altium_index[owner_idx].entries.append(obj)
             elif isinstance(obj, (
                 SchPolyline, SchPolygon, SchRectangle, SchLine, SchArc,
-                SchEllipse, SchRoundRectangle, SchBezier, SchText, SchLabel,
+                SchEllipse, SchEllipticalArc, SchRoundRectangle, SchBezier, SchText, SchLabel,
             )):
                 # Graphic primitives belong to components
                 if owner_idx in components_by_altium_index:
                     components_by_altium_index[owner_idx].graphic_primitives.append(obj)
+            elif isinstance(obj, SchImplementation):
+                # Implementation may point to ImplementationList (indirect) or directly to Component
+                target_comp_owner = owner_idx
+                # Check if owner_idx points to an ImplementationList
+                if owner_idx in impl_list_to_comp:
+                    target_comp_owner = impl_list_to_comp[owner_idx]
+                if target_comp_owner in components_by_altium_index:
+                    components_by_altium_index[target_comp_owner].implementations.append(obj)
 
         # ============================================================
         # Populate Document
@@ -181,6 +196,9 @@ class SchDocParser:
             elif isinstance(obj, SchEllipse):
                 if obj.owner_index not in components_by_altium_index:
                     doc.ellipses.append(obj)
+            elif isinstance(obj, SchEllipticalArc):
+                if obj.owner_index not in components_by_altium_index:
+                    doc.elliptical_arcs.append(obj)
             elif isinstance(obj, SchRoundRectangle):
                 if obj.owner_index not in components_by_altium_index:
                     doc.round_rectangles.append(obj)
@@ -294,6 +312,9 @@ class SchDocParser:
             SchRecordType.SHEET_ENTRY: self._build_sheet_entry,
             SchRecordType.IMAGE: self._build_image,
             SchRecordType.TEXT_FRAME: self._build_text_frame,
+            SchRecordType.ELLIPTICAL_ARC: self._build_elliptical_arc,
+            SchRecordType.IMPLEMENTATION_LIST: self._build_implementation_list,
+            SchRecordType.IMPLEMENTATION: self._build_implementation,
         }
 
         handler = handlers.get(record_type)
@@ -308,8 +329,7 @@ class SchDocParser:
         if record_type in (
             SchRecordType.HEADER, SchRecordType.SHEET_NAME, SchRecordType.SHEET_FILE_NAME,
             SchRecordType.TEMPLATE, SchRecordType.WARNING_SIGN, SchRecordType.IEEE_SYMBOL,
-            SchRecordType.PIE, SchRecordType.ELLIPTICAL_ARC,
-            SchRecordType.IMPLEMENTATION_LIST, SchRecordType.IMPLEMENTATION,
+            SchRecordType.PIE,
             SchRecordType.RECORD_46, SchRecordType.RECORD_47, SchRecordType.RECORD_48,
         ):
             return None  # Silently skip
@@ -336,6 +356,15 @@ class SchDocParser:
 
         sheet.grid_size_mm = sch_to_mm(self._get_int(kv, "VISIBLEGRIDSIZE", 10))
         sheet.font_count = self._get_int(kv, "FONTIDCOUNT", 0)
+
+        # Parse font table
+        for i in range(1, sheet.font_count + 1):
+            font = SchFont(
+                id=i,
+                name=kv.get(f"FONTNAME{i}", ""),
+                size=self._get_int(kv, f"SIZE{i}", 10),
+            )
+            sheet.fonts.append(font)
 
         # Title block
         tb = SchTitleBlock()
@@ -670,6 +699,41 @@ class SchDocParser:
         )
         img.is_embedded = kv.get("EMBEDIMAGE", "F") == "T"
         return img
+
+    def _build_elliptical_arc(self, kv: dict[str, str], index: int) -> SchEllipticalArc:
+        ea = SchEllipticalArc()
+        ea.owner_index = self._get_int(kv, "OWNERINDEX", -1)
+        ea.center = Point2D(
+            x_mm=sch_to_mm(self._get_int(kv, "LOCATION.X", 0)),
+            y_mm=sch_to_mm(self._get_int(kv, "LOCATION.Y", 0)),
+        )
+        ea.radius_x_mm = sch_to_mm(self._get_int(kv, "RADIUS", 0))
+        ea.radius_y_mm = sch_to_mm(self._get_int(kv, "SECONDARYRADIUS", 0))
+        ea.start_angle = self._get_float(kv, "STARTANGLE", 0.0)
+        ea.end_angle = self._get_float(kv, "ENDANGLE", 360.0)
+        ea.rotation_angle = self._get_float(kv, "ROTATION", 0.0)
+        ea.line_width = self._get_int(kv, "LINEWIDTH", 1)
+        ea.color = self._parse_color(kv, "COLOR")
+        return ea
+
+    def _build_implementation_list(self, kv: dict[str, str], index: int) -> SchImplementationList:
+        impl_list = SchImplementationList()
+        impl_list.owner_index = self._get_int(kv, "OWNERINDEX", -1)
+        return impl_list
+
+    def _build_implementation(self, kv: dict[str, str], index: int) -> SchImplementation:
+        impl = SchImplementation()
+        impl.owner_index = self._get_int(kv, "OWNERINDEX", -1)
+        impl.description = kv.get("DESCRIPTION", "")
+        impl.model_name = kv.get("MODELNAME", "")
+        impl.model_type = kv.get("MODELTYPE", "")
+        impl.is_current = kv.get("ISCURRENT", "F") == "T"
+        impl.datafile_count = self._get_int(kv, "DATAFILECOUNT", 0)
+        impl.model_datafile_entity = kv.get("MODELDATAFILEENTITY0", "")
+        impl.model_datafile_kind = kv.get("MODELDATAFILEKIND0", "")
+        if impl.model_type.upper() in ("PCBLIB",):
+            impl.is_footprint = True
+        return impl
 
     # -- Helpers --
 

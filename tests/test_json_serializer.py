@@ -26,7 +26,7 @@ class TestJsonSerializer:
         result = serialize_to_json(model, "SchDoc", "test.SchDoc")
         parsed = json.loads(result)
 
-        assert parsed["schema_version"] == "1.0"
+        assert parsed["schema_version"] == "1.1"
         assert parsed["generator"] == "altium-parser"
         assert parsed["file_type"] == "SchDoc"
         assert parsed["source_file"] == "test.SchDoc"
